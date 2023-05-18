@@ -11,7 +11,6 @@ extern crate alloc;
 #[macro_use]
 mod macros;
 
-pub mod buffer;
 pub mod features;
 pub mod io;
 pub mod message;

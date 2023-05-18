@@ -22,6 +22,7 @@ const CRASH_ERROR_MESSAGE: &str = "The s2n-quic-qns application shut down unexpe
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+//#[tokio::main(flavor = "current_thread")]
 #[tokio::main()]
 async fn main() {
     let format = tracing_subscriber::fmt::format()

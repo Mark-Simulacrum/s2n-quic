@@ -18,7 +18,7 @@ impl MaxSegments {
 
 impl Default for MaxSegments {
     fn default() -> Self {
-        MaxSegments::DEFAULT
+        MaxSegments::MAX
     }
 }
 
