@@ -9,12 +9,18 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
-criterion = { version = "0.4", features = ["html_reports"] }
+criterion = { version = "0.4", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = { version = "0.5" }
 internet-checksum = "0.2"
 s2n-codec = { path = "../../common/s2n-codec", features = ["testing"] }
 s2n-quic-core = { path = "../s2n-quic-core", features = ["testing"] }
 s2n-quic-crypto = { path = "../s2n-quic-crypto", features = ["testing"] }
+s2n-quic = { path = "../s2n-quic", features = ["unstable-provider-io-testing", "provider-tls-s2n", "provider-event-tracing"] }
+
+tokio = { version = "1", features = ["rt"] }
+tracing-subscriber = "0.3.17"
+openssl = { version = "*", features = ["vendored"] }
+bytes = "1"
 
 [[bench]]
 name = "bench"
