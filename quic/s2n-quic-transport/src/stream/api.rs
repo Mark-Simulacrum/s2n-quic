@@ -115,6 +115,22 @@ macro_rules! tx_stream_apis {
                 .into()
         }
 
+        pub fn poll_send_finished(
+            &mut self,
+            chunk: &mut Bytes,
+            cx: &mut Context,
+        ) -> Poll<Result<(), StreamError>> {
+            if chunk.is_empty() {
+                return Poll::Ready(Ok(()));
+            }
+
+            self.tx_request()?
+                .send(core::slice::from_mut(chunk))
+                .finish()
+                .poll(Some(cx))?
+                .into()
+        }
+
         /// Enqueues a slice of chunks of data for sending it towards the peer.
         ///
         /// The method will return:

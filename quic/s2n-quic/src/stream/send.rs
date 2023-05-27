@@ -41,6 +41,66 @@ macro_rules! impl_send_stream_api {
         ///
         /// The function returns:
         ///
+        /// - `Ok(())` if the data was enqueued for sending.
+        /// - `Err(e)` if the stream encountered a [`stream::Error`](crate::stream::Error).
+        ///
+        /// # Examples
+        ///
+        /// ```rust,no_run
+        /// # async fn test() -> s2n_quic::stream::Result<()> {
+        /// #   let stream: s2n_quic::stream::SendStream = todo!();
+        /// #
+        /// let data = bytes::Bytes::from_static(&[1, 2, 3, 4]);
+        /// stream.send(data).await?;
+        /// #
+        /// #   Ok(())
+        /// # }
+        /// ```
+        #[inline]
+        pub async fn send_finished(
+            &mut self,
+            mut data: bytes::Bytes,
+        ) -> $crate::stream::Result<()> {
+            ::futures::future::poll_fn(|cx| self.poll_send_finished(&mut data, cx)).await
+        }
+
+        /// Enqueues a chunk of data for sending it towards the peer.
+        ///
+        /// # Return value
+        ///
+        /// The function returns:
+        ///
+        /// - `Poll::Pending` if the stream's send buffer capacity is currently exhausted. In this case,
+        ///   the caller should retry sending after the [`Waker`](core::task::Waker) on the provided
+        ///   [`Context`](core::task::Context) is notified.
+        /// - `Poll::Ready(Ok(()))` if the data was enqueued for sending. The provided `chunk` will
+        ///   be replaced with an empty [`Bytes`](bytes::Bytes).
+        /// - `Poll::Ready(Err(e))` if the stream encountered a [`stream::Error`](crate::stream::Error).
+        #[inline]
+        pub fn poll_send_finished(
+            &mut self,
+            chunk: &mut bytes::Bytes,
+            cx: &mut core::task::Context,
+        ) -> core::task::Poll<$crate::stream::Result<()>> {
+            macro_rules! $dispatch {
+                () => {
+                    Err($crate::stream::Error::non_writable()).into()
+                };
+                ($variant: expr) => {
+                    $variant.poll_send_finished(chunk, cx)
+                };
+            }
+
+            let $stream = self;
+            $dispatch_body
+        }
+
+        /// Enqueues a chunk of data for sending it towards the peer.
+        ///
+        /// # Return value
+        ///
+        /// The function returns:
+        ///
         /// - `Poll::Pending` if the stream's send buffer capacity is currently exhausted. In this case,
         ///   the caller should retry sending after the [`Waker`](core::task::Waker) on the provided
         ///   [`Context`](core::task::Context) is notified.
