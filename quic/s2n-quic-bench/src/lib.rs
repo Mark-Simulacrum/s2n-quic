@@ -24,3 +24,10 @@ pub fn benchmarks(c: &mut Criterion) {
     //xdp::benchmarks(c);
     request_response::benchmarks(c);
 }
+
+#[cfg(test)]
+use criterion::{criterion_group, criterion_main};
+#[cfg(test)]
+criterion_group!(benches, crate::benchmarks);
+#[cfg(test)]
+criterion_main!(benches);

@@ -18,6 +18,7 @@ use core::{
     pin::Pin,
     sync::atomic::{AtomicU64, Ordering},
     task::{Context, Poll},
+    time::Duration,
 };
 use parking::Unparker;
 use s2n_quic_core::time::{self, Timestamp};
@@ -101,26 +102,51 @@ where
     let waker = Arc::new(waker).into();
     let mut cx = Context::from_waker(&waker);
 
+    // let mut timer_deltas = vec![];
+    // let start = std::time::Instant::now();
+    // let mut emitted = false;
     loop {
         match Future::poll(future.as_mut(), &mut cx) {
             Poll::Ready(_) => return,
             Poll::Pending => {
-                let target = clock.timer.0.load(Ordering::Relaxed);
+                //let target = clock.timer.0.load(Ordering::Relaxed);
 
-                if target == 0 {
-                    parker.park();
-                    continue;
-                }
+                parker.park();
 
-                let now = unsafe { clock.get_time().as_duration().as_micros() as u64 };
-                let diff = target.saturating_sub(now);
-                if diff > 1000 {
-                    let timeout = core::time::Duration::from_micros(diff);
-                    parker.park_timeout(timeout);
-                }
-                clock.timer.0.store(u64::MAX, Ordering::Relaxed);
+                //if target == 0 {
+                //    continue;
+                //}
+
+                // Call into park_timeout repeatedly until we've reached within 1ms of the desired
+                // time. Hopefully this is not actually called many, many times...
+                //loop {
+                //    let now = unsafe { clock.get_time().as_duration().as_micros() as u64 };
+                //    let diff = target.saturating_sub(now);
+                //    timer_deltas.push(diff);
+                //    if diff > 1000 {
+                //        let timeout = core::time::Duration::from_micros(diff);
+                //        if parker.park_timeout(timeout) {
+                //            // If explicitly notified, then stop waiting.
+                //            break;
+                //        }
+                //    } else {
+                //        // Store this only if we actually exhaust our timer.
+                //        clock.timer.0.store(u64::MAX, Ordering::Relaxed);
+                //        break;
+                //    }
+                //}
             }
         }
+
+        //if !emitted && start.elapsed() > core::time::Duration::from_secs(30) {
+        //    emitted = true;
+        //    let mut s = String::with_capacity(timer_deltas.len() * 5);
+        //    for delta in timer_deltas.iter() {
+        //        use std::fmt::Write;
+        //        writeln!(&mut s, "{}", delta).unwrap();
+        //    }
+        //    std::fs::write("/tmp/timer-deltas", s).unwrap();
+        //}
     }
 }
 

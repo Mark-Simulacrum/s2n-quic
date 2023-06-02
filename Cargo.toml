@@ -12,11 +12,12 @@ exclude = [
 ]
 
 [profile.release]
-lto = true
-codegen-units = 1
-incremental = false
+#lto = true
+#codegen-units = 1
+#incremental = false
 
 [profile.bench]
+debug = 1
 lto = true
 codegen-units = 1
-incremental = false
+#incremental = false
