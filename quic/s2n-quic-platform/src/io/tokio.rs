@@ -13,9 +13,9 @@ use s2n_quic_core::{
 use std::{convert::TryInto, io, io::ErrorKind};
 use tokio::runtime::Handle;
 
-mod builder;
-mod clock;
-pub(crate) mod task;
+pub mod builder;
+pub mod clock;
+pub mod task;
 #[cfg(test)]
 mod tests;
 

@@ -11,7 +11,7 @@ use crate::{
 };
 use core::task::{Context, Poll};
 use std::{io, os::unix::io::AsRawFd};
-use tokio::io::unix::AsyncFd;
+use tokio::io::{unix::AsyncFd, Interest};
 
 pub async fn rx<S: Into<std::net::UdpSocket>, M: UnixMessage + Unpin>(
     socket: S,
@@ -20,7 +20,7 @@ pub async fn rx<S: Into<std::net::UdpSocket>, M: UnixMessage + Unpin>(
     let socket = socket.into();
     socket.set_nonblocking(true).unwrap();
 
-    let socket = AsyncFd::new(socket).unwrap();
+    let socket = AsyncFd::with_interest(socket, Interest::READABLE).unwrap();
     let result = rx::Receiver::new(producer, socket).await;
     if let Some(err) = result {
         Err(err)
@@ -37,7 +37,7 @@ pub async fn tx<S: Into<std::net::UdpSocket>, M: UnixMessage + Unpin>(
     let socket = socket.into();
     socket.set_nonblocking(true).unwrap();
 
-    let socket = AsyncFd::new(socket).unwrap();
+    let socket = AsyncFd::with_interest(socket, Interest::WRITABLE).unwrap();
     let result = tx::Sender::new(consumer, socket, gso).await;
     if let Some(err) = result {
         Err(err)
