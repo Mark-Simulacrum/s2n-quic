@@ -426,6 +426,17 @@ where
             },
         );
 
+        if let Some(entry) = &result {
+            entry.set_accessed_addr();
+            self.subscriber()
+                .on_path_secret_map_address_cache_accessed_hit(
+                    event::builder::PathSecretMapAddressCacheAccessedHit {
+                        peer_address: SocketAddress::from(*peer).into_event(),
+                        age: entry.age(),
+                    },
+                );
+        }
+
         result
     }
 
@@ -442,6 +453,16 @@ where
                 hit: result.is_some(),
             },
         );
+
+        if let Some(entry) = &result {
+            entry.set_accessed_id();
+            self.subscriber().on_path_secret_map_id_cache_accessed_hit(
+                event::builder::PathSecretMapIdCacheAccessedHit {
+                    credential_id: id.into_event(),
+                    age: entry.age(),
+                },
+            );
+        }
 
         result
     }

@@ -1114,6 +1114,28 @@ pub mod api {
     }
     #[derive(Clone, Debug)]
     #[non_exhaustive]
+    #[doc = " Emitted when an entry is replaced by a new one for the same `peer_address`"]
+    pub struct PathSecretMapEntryEvicted<'a> {
+        pub peer_address: SocketAddress<'a>,
+        pub credential_id: &'a [u8],
+        #[doc = " Time since insertion of this entry"]
+        pub age: core::time::Duration,
+    }
+    #[cfg(any(test, feature = "testing"))]
+    impl<'a> crate::event::snapshot::Fmt for PathSecretMapEntryEvicted<'a> {
+        fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let mut fmt = fmt.debug_struct("PathSecretMapEntryEvicted");
+            fmt.field("peer_address", &self.peer_address);
+            fmt.field("credential_id", &"[HIDDEN]");
+            fmt.field("age", &self.age);
+            fmt.finish()
+        }
+    }
+    impl<'a> Event for PathSecretMapEntryEvicted<'a> {
+        const NAME: &'static str = "path_secret_map:entry_evicted";
+    }
+    #[derive(Clone, Debug)]
+    #[non_exhaustive]
     #[doc = " Emitted when an UnknownPathSecret packet was sent"]
     pub struct UnknownPathSecretPacketSent<'a> {
         pub peer_address: SocketAddress<'a>,
@@ -1493,6 +1515,27 @@ pub mod api {
     }
     #[derive(Clone, Debug)]
     #[non_exhaustive]
+    #[doc = " Emitted when the cache is accessed by peer address successfully"]
+    #[doc = ""]
+    #[doc = " Provides more information about the accessed entry."]
+    pub struct PathSecretMapAddressCacheAccessedHit<'a> {
+        pub peer_address: SocketAddress<'a>,
+        pub age: core::time::Duration,
+    }
+    #[cfg(any(test, feature = "testing"))]
+    impl<'a> crate::event::snapshot::Fmt for PathSecretMapAddressCacheAccessedHit<'a> {
+        fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let mut fmt = fmt.debug_struct("PathSecretMapAddressCacheAccessedHit");
+            fmt.field("peer_address", &self.peer_address);
+            fmt.field("age", &self.age);
+            fmt.finish()
+        }
+    }
+    impl<'a> Event for PathSecretMapAddressCacheAccessedHit<'a> {
+        const NAME: &'static str = "path_secret_map:address_cache_accessed_entry";
+    }
+    #[derive(Clone, Debug)]
+    #[non_exhaustive]
     #[doc = " Emitted when the cache is accessed by path secret ID"]
     #[doc = ""]
     #[doc = " This can be used to track cache hit ratios"]
@@ -1514,6 +1557,27 @@ pub mod api {
     }
     #[derive(Clone, Debug)]
     #[non_exhaustive]
+    #[doc = " Emitted when the cache is accessed by path secret ID successfully"]
+    #[doc = ""]
+    #[doc = " Provides more information about the accessed entry."]
+    pub struct PathSecretMapIdCacheAccessedHit<'a> {
+        pub credential_id: &'a [u8],
+        pub age: core::time::Duration,
+    }
+    #[cfg(any(test, feature = "testing"))]
+    impl<'a> crate::event::snapshot::Fmt for PathSecretMapIdCacheAccessedHit<'a> {
+        fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let mut fmt = fmt.debug_struct("PathSecretMapIdCacheAccessedHit");
+            fmt.field("credential_id", &"[HIDDEN]");
+            fmt.field("age", &self.age);
+            fmt.finish()
+        }
+    }
+    impl<'a> Event for PathSecretMapIdCacheAccessedHit<'a> {
+        const NAME: &'static str = "path_secret_map:id_cache_accessed_entry";
+    }
+    #[derive(Clone, Debug)]
+    #[non_exhaustive]
     #[doc = " Emitted when the cleaner task performed a single cycle"]
     #[doc = ""]
     #[doc = " This can be used to track cache utilization"]
@@ -1522,12 +1586,20 @@ pub mod api {
         pub id_entries: usize,
         #[doc = " The number of Path Secret ID entries that were retired in the cycle"]
         pub id_entries_retired: usize,
+        #[doc = " Count of entries accessed since the last cycle"]
+        pub id_entries_active: usize,
+        #[doc = " The utilization percentage of the active number of entries after the cycle"]
+        pub id_entries_active_utilization: f32,
         #[doc = " The utilization percentage of the available number of entries after the cycle"]
         pub id_entries_utilization: f32,
         #[doc = " The utilization percentage of the available number of entries before the cycle"]
         pub id_entries_initial_utilization: f32,
         #[doc = " The number of SocketAddress entries left after the cleaning cycle"]
         pub address_entries: usize,
+        #[doc = " Count of entries accessed since the last cycle"]
+        pub address_entries_active: usize,
+        #[doc = " The utilization percentage of the active number of entries after the cycle"]
+        pub address_entries_active_utilization: f32,
         #[doc = " The number of SocketAddress entries that were retired in the cycle"]
         pub address_entries_retired: usize,
         #[doc = " The utilization percentage of the available number of address entries after the cycle"]
@@ -1545,12 +1617,22 @@ pub mod api {
             let mut fmt = fmt.debug_struct("PathSecretMapCleanerCycled");
             fmt.field("id_entries", &self.id_entries);
             fmt.field("id_entries_retired", &self.id_entries_retired);
+            fmt.field("id_entries_active", &self.id_entries_active);
+            fmt.field(
+                "id_entries_active_utilization",
+                &self.id_entries_active_utilization,
+            );
             fmt.field("id_entries_utilization", &self.id_entries_utilization);
             fmt.field(
                 "id_entries_initial_utilization",
                 &self.id_entries_initial_utilization,
             );
             fmt.field("address_entries", &self.address_entries);
+            fmt.field("address_entries_active", &self.address_entries_active);
+            fmt.field(
+                "address_entries_active_utilization",
+                &self.address_entries_active_utilization,
+            );
             fmt.field("address_entries_retired", &self.address_entries_retired);
             fmt.field(
                 "address_entries_utilization",
@@ -2182,6 +2264,20 @@ pub mod tracing {
             tracing :: event ! (target : "path_secret_map_entry_replaced" , parent : parent , tracing :: Level :: DEBUG , { peer_address = tracing :: field :: debug (peer_address) , new_credential_id = tracing :: field :: debug (new_credential_id) , previous_credential_id = tracing :: field :: debug (previous_credential_id) });
         }
         #[inline]
+        fn on_path_secret_map_entry_evicted(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapEntryEvicted,
+        ) {
+            let parent = self.parent(meta);
+            let api::PathSecretMapEntryEvicted {
+                peer_address,
+                credential_id,
+                age,
+            } = event;
+            tracing :: event ! (target : "path_secret_map_entry_evicted" , parent : parent , tracing :: Level :: DEBUG , { peer_address = tracing :: field :: debug (peer_address) , credential_id = tracing :: field :: debug (credential_id) , age = tracing :: field :: debug (age) });
+        }
+        #[inline]
         fn on_unknown_path_secret_packet_sent(
             &self,
             meta: &api::EndpointMeta,
@@ -2426,6 +2522,16 @@ pub mod tracing {
             tracing :: event ! (target : "path_secret_map_address_cache_accessed" , parent : parent , tracing :: Level :: DEBUG , { peer_address = tracing :: field :: debug (peer_address) , hit = tracing :: field :: debug (hit) });
         }
         #[inline]
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            let parent = self.parent(meta);
+            let api::PathSecretMapAddressCacheAccessedHit { peer_address, age } = event;
+            tracing :: event ! (target : "path_secret_map_address_cache_accessed_hit" , parent : parent , tracing :: Level :: DEBUG , { peer_address = tracing :: field :: debug (peer_address) , age = tracing :: field :: debug (age) });
+        }
+        #[inline]
         fn on_path_secret_map_id_cache_accessed(
             &self,
             meta: &api::EndpointMeta,
@@ -2434,6 +2540,16 @@ pub mod tracing {
             let parent = self.parent(meta);
             let api::PathSecretMapIdCacheAccessed { credential_id, hit } = event;
             tracing :: event ! (target : "path_secret_map_id_cache_accessed" , parent : parent , tracing :: Level :: DEBUG , { credential_id = tracing :: field :: debug (credential_id) , hit = tracing :: field :: debug (hit) });
+        }
+        #[inline]
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapIdCacheAccessedHit,
+        ) {
+            let parent = self.parent(meta);
+            let api::PathSecretMapIdCacheAccessedHit { credential_id, age } = event;
+            tracing :: event ! (target : "path_secret_map_id_cache_accessed_hit" , parent : parent , tracing :: Level :: DEBUG , { credential_id = tracing :: field :: debug (credential_id) , age = tracing :: field :: debug (age) });
         }
         #[inline]
         fn on_path_secret_map_cleaner_cycled(
@@ -2445,16 +2561,20 @@ pub mod tracing {
             let api::PathSecretMapCleanerCycled {
                 id_entries,
                 id_entries_retired,
+                id_entries_active,
+                id_entries_active_utilization,
                 id_entries_utilization,
                 id_entries_initial_utilization,
                 address_entries,
+                address_entries_active,
+                address_entries_active_utilization,
                 address_entries_retired,
                 address_entries_utilization,
                 address_entries_initial_utilization,
                 handshake_requests,
                 handshake_requests_retired,
             } = event;
-            tracing :: event ! (target : "path_secret_map_cleaner_cycled" , parent : parent , tracing :: Level :: DEBUG , { id_entries = tracing :: field :: debug (id_entries) , id_entries_retired = tracing :: field :: debug (id_entries_retired) , id_entries_utilization = tracing :: field :: debug (id_entries_utilization) , id_entries_initial_utilization = tracing :: field :: debug (id_entries_initial_utilization) , address_entries = tracing :: field :: debug (address_entries) , address_entries_retired = tracing :: field :: debug (address_entries_retired) , address_entries_utilization = tracing :: field :: debug (address_entries_utilization) , address_entries_initial_utilization = tracing :: field :: debug (address_entries_initial_utilization) , handshake_requests = tracing :: field :: debug (handshake_requests) , handshake_requests_retired = tracing :: field :: debug (handshake_requests_retired) });
+            tracing :: event ! (target : "path_secret_map_cleaner_cycled" , parent : parent , tracing :: Level :: DEBUG , { id_entries = tracing :: field :: debug (id_entries) , id_entries_retired = tracing :: field :: debug (id_entries_retired) , id_entries_active = tracing :: field :: debug (id_entries_active) , id_entries_active_utilization = tracing :: field :: debug (id_entries_active_utilization) , id_entries_utilization = tracing :: field :: debug (id_entries_utilization) , id_entries_initial_utilization = tracing :: field :: debug (id_entries_initial_utilization) , address_entries = tracing :: field :: debug (address_entries) , address_entries_active = tracing :: field :: debug (address_entries_active) , address_entries_active_utilization = tracing :: field :: debug (address_entries_active_utilization) , address_entries_retired = tracing :: field :: debug (address_entries_retired) , address_entries_utilization = tracing :: field :: debug (address_entries_utilization) , address_entries_initial_utilization = tracing :: field :: debug (address_entries_initial_utilization) , handshake_requests = tracing :: field :: debug (handshake_requests) , handshake_requests_retired = tracing :: field :: debug (handshake_requests_retired) });
         }
     }
 }
@@ -3512,6 +3632,29 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    #[doc = " Emitted when an entry is replaced by a new one for the same `peer_address`"]
+    pub struct PathSecretMapEntryEvicted<'a> {
+        pub peer_address: SocketAddress<'a>,
+        pub credential_id: &'a [u8],
+        #[doc = " Time since insertion of this entry"]
+        pub age: core::time::Duration,
+    }
+    impl<'a> IntoEvent<api::PathSecretMapEntryEvicted<'a>> for PathSecretMapEntryEvicted<'a> {
+        #[inline]
+        fn into_event(self) -> api::PathSecretMapEntryEvicted<'a> {
+            let PathSecretMapEntryEvicted {
+                peer_address,
+                credential_id,
+                age,
+            } = self;
+            api::PathSecretMapEntryEvicted {
+                peer_address: peer_address.into_event(),
+                credential_id: credential_id.into_event(),
+                age: age.into_event(),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     #[doc = " Emitted when an UnknownPathSecret packet was sent"]
     pub struct UnknownPathSecretPacketSent<'a> {
         pub peer_address: SocketAddress<'a>,
@@ -3900,6 +4043,26 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    #[doc = " Emitted when the cache is accessed by peer address successfully"]
+    #[doc = ""]
+    #[doc = " Provides more information about the accessed entry."]
+    pub struct PathSecretMapAddressCacheAccessedHit<'a> {
+        pub peer_address: SocketAddress<'a>,
+        pub age: core::time::Duration,
+    }
+    impl<'a> IntoEvent<api::PathSecretMapAddressCacheAccessedHit<'a>>
+        for PathSecretMapAddressCacheAccessedHit<'a>
+    {
+        #[inline]
+        fn into_event(self) -> api::PathSecretMapAddressCacheAccessedHit<'a> {
+            let PathSecretMapAddressCacheAccessedHit { peer_address, age } = self;
+            api::PathSecretMapAddressCacheAccessedHit {
+                peer_address: peer_address.into_event(),
+                age: age.into_event(),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     #[doc = " Emitted when the cache is accessed by path secret ID"]
     #[doc = ""]
     #[doc = " This can be used to track cache hit ratios"]
@@ -3918,6 +4081,26 @@ pub mod builder {
         }
     }
     #[derive(Clone, Debug)]
+    #[doc = " Emitted when the cache is accessed by path secret ID successfully"]
+    #[doc = ""]
+    #[doc = " Provides more information about the accessed entry."]
+    pub struct PathSecretMapIdCacheAccessedHit<'a> {
+        pub credential_id: &'a [u8],
+        pub age: core::time::Duration,
+    }
+    impl<'a> IntoEvent<api::PathSecretMapIdCacheAccessedHit<'a>>
+        for PathSecretMapIdCacheAccessedHit<'a>
+    {
+        #[inline]
+        fn into_event(self) -> api::PathSecretMapIdCacheAccessedHit<'a> {
+            let PathSecretMapIdCacheAccessedHit { credential_id, age } = self;
+            api::PathSecretMapIdCacheAccessedHit {
+                credential_id: credential_id.into_event(),
+                age: age.into_event(),
+            }
+        }
+    }
+    #[derive(Clone, Debug)]
     #[doc = " Emitted when the cleaner task performed a single cycle"]
     #[doc = ""]
     #[doc = " This can be used to track cache utilization"]
@@ -3926,12 +4109,20 @@ pub mod builder {
         pub id_entries: usize,
         #[doc = " The number of Path Secret ID entries that were retired in the cycle"]
         pub id_entries_retired: usize,
+        #[doc = " Count of entries accessed since the last cycle"]
+        pub id_entries_active: usize,
+        #[doc = " The utilization percentage of the active number of entries after the cycle"]
+        pub id_entries_active_utilization: f32,
         #[doc = " The utilization percentage of the available number of entries after the cycle"]
         pub id_entries_utilization: f32,
         #[doc = " The utilization percentage of the available number of entries before the cycle"]
         pub id_entries_initial_utilization: f32,
         #[doc = " The number of SocketAddress entries left after the cleaning cycle"]
         pub address_entries: usize,
+        #[doc = " Count of entries accessed since the last cycle"]
+        pub address_entries_active: usize,
+        #[doc = " The utilization percentage of the active number of entries after the cycle"]
+        pub address_entries_active_utilization: f32,
         #[doc = " The number of SocketAddress entries that were retired in the cycle"]
         pub address_entries_retired: usize,
         #[doc = " The utilization percentage of the available number of address entries after the cycle"]
@@ -3949,9 +4140,13 @@ pub mod builder {
             let PathSecretMapCleanerCycled {
                 id_entries,
                 id_entries_retired,
+                id_entries_active,
+                id_entries_active_utilization,
                 id_entries_utilization,
                 id_entries_initial_utilization,
                 address_entries,
+                address_entries_active,
+                address_entries_active_utilization,
                 address_entries_retired,
                 address_entries_utilization,
                 address_entries_initial_utilization,
@@ -3961,9 +4156,13 @@ pub mod builder {
             api::PathSecretMapCleanerCycled {
                 id_entries: id_entries.into_event(),
                 id_entries_retired: id_entries_retired.into_event(),
+                id_entries_active: id_entries_active.into_event(),
+                id_entries_active_utilization: id_entries_active_utilization.into_event(),
                 id_entries_utilization: id_entries_utilization.into_event(),
                 id_entries_initial_utilization: id_entries_initial_utilization.into_event(),
                 address_entries: address_entries.into_event(),
+                address_entries_active: address_entries_active.into_event(),
+                address_entries_active_utilization: address_entries_active_utilization.into_event(),
                 address_entries_retired: address_entries_retired.into_event(),
                 address_entries_utilization: address_entries_utilization.into_event(),
                 address_entries_initial_utilization: address_entries_initial_utilization
@@ -4485,6 +4684,16 @@ mod traits {
             let _ = meta;
             let _ = event;
         }
+        #[doc = "Called when the `PathSecretMapEntryEvicted` event is triggered"]
+        #[inline]
+        fn on_path_secret_map_entry_evicted(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapEntryEvicted,
+        ) {
+            let _ = meta;
+            let _ = event;
+        }
         #[doc = "Called when the `UnknownPathSecretPacketSent` event is triggered"]
         #[inline]
         fn on_unknown_path_secret_packet_sent(
@@ -4671,12 +4880,32 @@ mod traits {
             let _ = meta;
             let _ = event;
         }
+        #[doc = "Called when the `PathSecretMapAddressCacheAccessedHit` event is triggered"]
+        #[inline]
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            let _ = meta;
+            let _ = event;
+        }
         #[doc = "Called when the `PathSecretMapIdCacheAccessed` event is triggered"]
         #[inline]
         fn on_path_secret_map_id_cache_accessed(
             &self,
             meta: &api::EndpointMeta,
             event: &api::PathSecretMapIdCacheAccessed,
+        ) {
+            let _ = meta;
+            let _ = event;
+        }
+        #[doc = "Called when the `PathSecretMapIdCacheAccessedHit` event is triggered"]
+        #[inline]
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapIdCacheAccessedHit,
         ) {
             let _ = meta;
             let _ = event;
@@ -5093,6 +5322,14 @@ mod traits {
             self.as_ref().on_path_secret_map_entry_replaced(meta, event);
         }
         #[inline]
+        fn on_path_secret_map_entry_evicted(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapEntryEvicted,
+        ) {
+            self.as_ref().on_path_secret_map_entry_evicted(meta, event);
+        }
+        #[inline]
         fn on_unknown_path_secret_packet_sent(
             &self,
             meta: &api::EndpointMeta,
@@ -5250,6 +5487,15 @@ mod traits {
                 .on_path_secret_map_address_cache_accessed(meta, event);
         }
         #[inline]
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            self.as_ref()
+                .on_path_secret_map_address_cache_accessed_hit(meta, event);
+        }
+        #[inline]
         fn on_path_secret_map_id_cache_accessed(
             &self,
             meta: &api::EndpointMeta,
@@ -5257,6 +5503,15 @@ mod traits {
         ) {
             self.as_ref()
                 .on_path_secret_map_id_cache_accessed(meta, event);
+        }
+        #[inline]
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapIdCacheAccessedHit,
+        ) {
+            self.as_ref()
+                .on_path_secret_map_id_cache_accessed_hit(meta, event);
         }
         #[inline]
         fn on_path_secret_map_cleaner_cycled(
@@ -5695,6 +5950,15 @@ mod traits {
             (self.1).on_path_secret_map_entry_replaced(meta, event);
         }
         #[inline]
+        fn on_path_secret_map_entry_evicted(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapEntryEvicted,
+        ) {
+            (self.0).on_path_secret_map_entry_evicted(meta, event);
+            (self.1).on_path_secret_map_entry_evicted(meta, event);
+        }
+        #[inline]
         fn on_unknown_path_secret_packet_sent(
             &self,
             meta: &api::EndpointMeta,
@@ -5862,6 +6126,15 @@ mod traits {
             (self.1).on_path_secret_map_address_cache_accessed(meta, event);
         }
         #[inline]
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            (self.0).on_path_secret_map_address_cache_accessed_hit(meta, event);
+            (self.1).on_path_secret_map_address_cache_accessed_hit(meta, event);
+        }
+        #[inline]
         fn on_path_secret_map_id_cache_accessed(
             &self,
             meta: &api::EndpointMeta,
@@ -5869,6 +6142,15 @@ mod traits {
         ) {
             (self.0).on_path_secret_map_id_cache_accessed(meta, event);
             (self.1).on_path_secret_map_id_cache_accessed(meta, event);
+        }
+        #[inline]
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapIdCacheAccessedHit,
+        ) {
+            (self.0).on_path_secret_map_id_cache_accessed_hit(meta, event);
+            (self.1).on_path_secret_map_id_cache_accessed_hit(meta, event);
         }
         #[inline]
         fn on_path_secret_map_cleaner_cycled(
@@ -5965,6 +6247,8 @@ mod traits {
         fn on_path_secret_map_entry_ready(&self, event: builder::PathSecretMapEntryReady);
         #[doc = "Publishes a `PathSecretMapEntryReplaced` event to the publisher's subscriber"]
         fn on_path_secret_map_entry_replaced(&self, event: builder::PathSecretMapEntryReplaced);
+        #[doc = "Publishes a `PathSecretMapEntryEvicted` event to the publisher's subscriber"]
+        fn on_path_secret_map_entry_evicted(&self, event: builder::PathSecretMapEntryEvicted);
         #[doc = "Publishes a `UnknownPathSecretPacketSent` event to the publisher's subscriber"]
         fn on_unknown_path_secret_packet_sent(&self, event: builder::UnknownPathSecretPacketSent);
         #[doc = "Publishes a `UnknownPathSecretPacketReceived` event to the publisher's subscriber"]
@@ -6018,10 +6302,20 @@ mod traits {
             &self,
             event: builder::PathSecretMapAddressCacheAccessed,
         );
+        #[doc = "Publishes a `PathSecretMapAddressCacheAccessedHit` event to the publisher's subscriber"]
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            event: builder::PathSecretMapAddressCacheAccessedHit,
+        );
         #[doc = "Publishes a `PathSecretMapIdCacheAccessed` event to the publisher's subscriber"]
         fn on_path_secret_map_id_cache_accessed(
             &self,
             event: builder::PathSecretMapIdCacheAccessed,
+        );
+        #[doc = "Publishes a `PathSecretMapIdCacheAccessedHit` event to the publisher's subscriber"]
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            event: builder::PathSecretMapIdCacheAccessedHit,
         );
         #[doc = "Publishes a `PathSecretMapCleanerCycled` event to the publisher's subscriber"]
         fn on_path_secret_map_cleaner_cycled(&self, event: builder::PathSecretMapCleanerCycled);
@@ -6236,6 +6530,13 @@ mod traits {
             self.subscriber.on_event(&self.meta, &event);
         }
         #[inline]
+        fn on_path_secret_map_entry_evicted(&self, event: builder::PathSecretMapEntryEvicted) {
+            let event = event.into_event();
+            self.subscriber
+                .on_path_secret_map_entry_evicted(&self.meta, &event);
+            self.subscriber.on_event(&self.meta, &event);
+        }
+        #[inline]
         fn on_unknown_path_secret_packet_sent(&self, event: builder::UnknownPathSecretPacketSent) {
             let event = event.into_event();
             self.subscriber
@@ -6382,6 +6683,16 @@ mod traits {
             self.subscriber.on_event(&self.meta, &event);
         }
         #[inline]
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            event: builder::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            let event = event.into_event();
+            self.subscriber
+                .on_path_secret_map_address_cache_accessed_hit(&self.meta, &event);
+            self.subscriber.on_event(&self.meta, &event);
+        }
+        #[inline]
         fn on_path_secret_map_id_cache_accessed(
             &self,
             event: builder::PathSecretMapIdCacheAccessed,
@@ -6389,6 +6700,16 @@ mod traits {
             let event = event.into_event();
             self.subscriber
                 .on_path_secret_map_id_cache_accessed(&self.meta, &event);
+            self.subscriber.on_event(&self.meta, &event);
+        }
+        #[inline]
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            event: builder::PathSecretMapIdCacheAccessedHit,
+        ) {
+            let event = event.into_event();
+            self.subscriber
+                .on_path_secret_map_id_cache_accessed_hit(&self.meta, &event);
             self.subscriber.on_event(&self.meta, &event);
         }
         #[inline]
@@ -6673,6 +6994,7 @@ pub mod testing {
             pub path_secret_map_entry_inserted: AtomicU64,
             pub path_secret_map_entry_ready: AtomicU64,
             pub path_secret_map_entry_replaced: AtomicU64,
+            pub path_secret_map_entry_evicted: AtomicU64,
             pub unknown_path_secret_packet_sent: AtomicU64,
             pub unknown_path_secret_packet_received: AtomicU64,
             pub unknown_path_secret_packet_accepted: AtomicU64,
@@ -6692,7 +7014,9 @@ pub mod testing {
             pub stale_key_packet_rejected: AtomicU64,
             pub stale_key_packet_dropped: AtomicU64,
             pub path_secret_map_address_cache_accessed: AtomicU64,
+            pub path_secret_map_address_cache_accessed_hit: AtomicU64,
             pub path_secret_map_id_cache_accessed: AtomicU64,
+            pub path_secret_map_id_cache_accessed_hit: AtomicU64,
             pub path_secret_map_cleaner_cycled: AtomicU64,
         }
         impl Drop for Subscriber {
@@ -6750,6 +7074,7 @@ pub mod testing {
                     path_secret_map_entry_inserted: AtomicU64::new(0),
                     path_secret_map_entry_ready: AtomicU64::new(0),
                     path_secret_map_entry_replaced: AtomicU64::new(0),
+                    path_secret_map_entry_evicted: AtomicU64::new(0),
                     unknown_path_secret_packet_sent: AtomicU64::new(0),
                     unknown_path_secret_packet_received: AtomicU64::new(0),
                     unknown_path_secret_packet_accepted: AtomicU64::new(0),
@@ -6769,7 +7094,9 @@ pub mod testing {
                     stale_key_packet_rejected: AtomicU64::new(0),
                     stale_key_packet_dropped: AtomicU64::new(0),
                     path_secret_map_address_cache_accessed: AtomicU64::new(0),
+                    path_secret_map_address_cache_accessed_hit: AtomicU64::new(0),
                     path_secret_map_id_cache_accessed: AtomicU64::new(0),
+                    path_secret_map_id_cache_accessed_hit: AtomicU64::new(0),
                     path_secret_map_cleaner_cycled: AtomicU64::new(0),
                 }
             }
@@ -7076,6 +7403,18 @@ pub mod testing {
                 let out = format!("{meta:?} {event:?}");
                 self.output.lock().unwrap().push(out);
             }
+            fn on_path_secret_map_entry_evicted(
+                &self,
+                meta: &api::EndpointMeta,
+                event: &api::PathSecretMapEntryEvicted,
+            ) {
+                self.path_secret_map_entry_evicted
+                    .fetch_add(1, Ordering::Relaxed);
+                let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
+                let event = crate::event::snapshot::Fmt::to_snapshot(event);
+                let out = format!("{meta:?} {event:?}");
+                self.output.lock().unwrap().push(out);
+            }
             fn on_unknown_path_secret_packet_sent(
                 &self,
                 meta: &api::EndpointMeta,
@@ -7298,12 +7637,36 @@ pub mod testing {
                 let out = format!("{meta:?} {event:?}");
                 self.output.lock().unwrap().push(out);
             }
+            fn on_path_secret_map_address_cache_accessed_hit(
+                &self,
+                meta: &api::EndpointMeta,
+                event: &api::PathSecretMapAddressCacheAccessedHit,
+            ) {
+                self.path_secret_map_address_cache_accessed_hit
+                    .fetch_add(1, Ordering::Relaxed);
+                let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
+                let event = crate::event::snapshot::Fmt::to_snapshot(event);
+                let out = format!("{meta:?} {event:?}");
+                self.output.lock().unwrap().push(out);
+            }
             fn on_path_secret_map_id_cache_accessed(
                 &self,
                 meta: &api::EndpointMeta,
                 event: &api::PathSecretMapIdCacheAccessed,
             ) {
                 self.path_secret_map_id_cache_accessed
+                    .fetch_add(1, Ordering::Relaxed);
+                let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
+                let event = crate::event::snapshot::Fmt::to_snapshot(event);
+                let out = format!("{meta:?} {event:?}");
+                self.output.lock().unwrap().push(out);
+            }
+            fn on_path_secret_map_id_cache_accessed_hit(
+                &self,
+                meta: &api::EndpointMeta,
+                event: &api::PathSecretMapIdCacheAccessedHit,
+            ) {
+                self.path_secret_map_id_cache_accessed_hit
                     .fetch_add(1, Ordering::Relaxed);
                 let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
                 let event = crate::event::snapshot::Fmt::to_snapshot(event);
@@ -7370,6 +7733,7 @@ pub mod testing {
         pub path_secret_map_entry_inserted: AtomicU64,
         pub path_secret_map_entry_ready: AtomicU64,
         pub path_secret_map_entry_replaced: AtomicU64,
+        pub path_secret_map_entry_evicted: AtomicU64,
         pub unknown_path_secret_packet_sent: AtomicU64,
         pub unknown_path_secret_packet_received: AtomicU64,
         pub unknown_path_secret_packet_accepted: AtomicU64,
@@ -7389,7 +7753,9 @@ pub mod testing {
         pub stale_key_packet_rejected: AtomicU64,
         pub stale_key_packet_dropped: AtomicU64,
         pub path_secret_map_address_cache_accessed: AtomicU64,
+        pub path_secret_map_address_cache_accessed_hit: AtomicU64,
         pub path_secret_map_id_cache_accessed: AtomicU64,
+        pub path_secret_map_id_cache_accessed_hit: AtomicU64,
         pub path_secret_map_cleaner_cycled: AtomicU64,
     }
     impl Drop for Subscriber {
@@ -7464,6 +7830,7 @@ pub mod testing {
                 path_secret_map_entry_inserted: AtomicU64::new(0),
                 path_secret_map_entry_ready: AtomicU64::new(0),
                 path_secret_map_entry_replaced: AtomicU64::new(0),
+                path_secret_map_entry_evicted: AtomicU64::new(0),
                 unknown_path_secret_packet_sent: AtomicU64::new(0),
                 unknown_path_secret_packet_received: AtomicU64::new(0),
                 unknown_path_secret_packet_accepted: AtomicU64::new(0),
@@ -7483,7 +7850,9 @@ pub mod testing {
                 stale_key_packet_rejected: AtomicU64::new(0),
                 stale_key_packet_dropped: AtomicU64::new(0),
                 path_secret_map_address_cache_accessed: AtomicU64::new(0),
+                path_secret_map_address_cache_accessed_hit: AtomicU64::new(0),
                 path_secret_map_id_cache_accessed: AtomicU64::new(0),
+                path_secret_map_id_cache_accessed_hit: AtomicU64::new(0),
                 path_secret_map_cleaner_cycled: AtomicU64::new(0),
             }
         }
@@ -8035,6 +8404,18 @@ pub mod testing {
             let out = format!("{meta:?} {event:?}");
             self.output.lock().unwrap().push(out);
         }
+        fn on_path_secret_map_entry_evicted(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapEntryEvicted,
+        ) {
+            self.path_secret_map_entry_evicted
+                .fetch_add(1, Ordering::Relaxed);
+            let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
+            let event = crate::event::snapshot::Fmt::to_snapshot(event);
+            let out = format!("{meta:?} {event:?}");
+            self.output.lock().unwrap().push(out);
+        }
         fn on_unknown_path_secret_packet_sent(
             &self,
             meta: &api::EndpointMeta,
@@ -8257,12 +8638,36 @@ pub mod testing {
             let out = format!("{meta:?} {event:?}");
             self.output.lock().unwrap().push(out);
         }
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            self.path_secret_map_address_cache_accessed_hit
+                .fetch_add(1, Ordering::Relaxed);
+            let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
+            let event = crate::event::snapshot::Fmt::to_snapshot(event);
+            let out = format!("{meta:?} {event:?}");
+            self.output.lock().unwrap().push(out);
+        }
         fn on_path_secret_map_id_cache_accessed(
             &self,
             meta: &api::EndpointMeta,
             event: &api::PathSecretMapIdCacheAccessed,
         ) {
             self.path_secret_map_id_cache_accessed
+                .fetch_add(1, Ordering::Relaxed);
+            let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
+            let event = crate::event::snapshot::Fmt::to_snapshot(event);
+            let out = format!("{meta:?} {event:?}");
+            self.output.lock().unwrap().push(out);
+        }
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            meta: &api::EndpointMeta,
+            event: &api::PathSecretMapIdCacheAccessedHit,
+        ) {
+            self.path_secret_map_id_cache_accessed_hit
                 .fetch_add(1, Ordering::Relaxed);
             let meta = crate::event::snapshot::Fmt::to_snapshot(meta);
             let event = crate::event::snapshot::Fmt::to_snapshot(event);
@@ -8328,6 +8733,7 @@ pub mod testing {
         pub path_secret_map_entry_inserted: AtomicU64,
         pub path_secret_map_entry_ready: AtomicU64,
         pub path_secret_map_entry_replaced: AtomicU64,
+        pub path_secret_map_entry_evicted: AtomicU64,
         pub unknown_path_secret_packet_sent: AtomicU64,
         pub unknown_path_secret_packet_received: AtomicU64,
         pub unknown_path_secret_packet_accepted: AtomicU64,
@@ -8347,7 +8753,9 @@ pub mod testing {
         pub stale_key_packet_rejected: AtomicU64,
         pub stale_key_packet_dropped: AtomicU64,
         pub path_secret_map_address_cache_accessed: AtomicU64,
+        pub path_secret_map_address_cache_accessed_hit: AtomicU64,
         pub path_secret_map_id_cache_accessed: AtomicU64,
+        pub path_secret_map_id_cache_accessed_hit: AtomicU64,
         pub path_secret_map_cleaner_cycled: AtomicU64,
     }
     impl Publisher {
@@ -8412,6 +8820,7 @@ pub mod testing {
                 path_secret_map_entry_inserted: AtomicU64::new(0),
                 path_secret_map_entry_ready: AtomicU64::new(0),
                 path_secret_map_entry_replaced: AtomicU64::new(0),
+                path_secret_map_entry_evicted: AtomicU64::new(0),
                 unknown_path_secret_packet_sent: AtomicU64::new(0),
                 unknown_path_secret_packet_received: AtomicU64::new(0),
                 unknown_path_secret_packet_accepted: AtomicU64::new(0),
@@ -8431,7 +8840,9 @@ pub mod testing {
                 stale_key_packet_rejected: AtomicU64::new(0),
                 stale_key_packet_dropped: AtomicU64::new(0),
                 path_secret_map_address_cache_accessed: AtomicU64::new(0),
+                path_secret_map_address_cache_accessed_hit: AtomicU64::new(0),
                 path_secret_map_id_cache_accessed: AtomicU64::new(0),
+                path_secret_map_id_cache_accessed_hit: AtomicU64::new(0),
                 path_secret_map_cleaner_cycled: AtomicU64::new(0),
             }
         }
@@ -8640,6 +9051,14 @@ pub mod testing {
             let out = format!("{event:?}");
             self.output.lock().unwrap().push(out);
         }
+        fn on_path_secret_map_entry_evicted(&self, event: builder::PathSecretMapEntryEvicted) {
+            self.path_secret_map_entry_evicted
+                .fetch_add(1, Ordering::Relaxed);
+            let event = event.into_event();
+            let event = crate::event::snapshot::Fmt::to_snapshot(&event);
+            let out = format!("{event:?}");
+            self.output.lock().unwrap().push(out);
+        }
         fn on_unknown_path_secret_packet_sent(&self, event: builder::UnknownPathSecretPacketSent) {
             self.unknown_path_secret_packet_sent
                 .fetch_add(1, Ordering::Relaxed);
@@ -8805,11 +9224,33 @@ pub mod testing {
             let out = format!("{event:?}");
             self.output.lock().unwrap().push(out);
         }
+        fn on_path_secret_map_address_cache_accessed_hit(
+            &self,
+            event: builder::PathSecretMapAddressCacheAccessedHit,
+        ) {
+            self.path_secret_map_address_cache_accessed_hit
+                .fetch_add(1, Ordering::Relaxed);
+            let event = event.into_event();
+            let event = crate::event::snapshot::Fmt::to_snapshot(&event);
+            let out = format!("{event:?}");
+            self.output.lock().unwrap().push(out);
+        }
         fn on_path_secret_map_id_cache_accessed(
             &self,
             event: builder::PathSecretMapIdCacheAccessed,
         ) {
             self.path_secret_map_id_cache_accessed
+                .fetch_add(1, Ordering::Relaxed);
+            let event = event.into_event();
+            let event = crate::event::snapshot::Fmt::to_snapshot(&event);
+            let out = format!("{event:?}");
+            self.output.lock().unwrap().push(out);
+        }
+        fn on_path_secret_map_id_cache_accessed_hit(
+            &self,
+            event: builder::PathSecretMapIdCacheAccessedHit,
+        ) {
+            self.path_secret_map_id_cache_accessed_hit
                 .fetch_add(1, Ordering::Relaxed);
             let event = event.into_event();
             let event = crate::event::snapshot::Fmt::to_snapshot(&event);
