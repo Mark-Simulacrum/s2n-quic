@@ -5,6 +5,7 @@
 
 use cfg_if::cfg_if;
 use s2n_quic_core::crypto;
+use s2n_quic_core::crypto::tls::offload::OffloadEndpoint;
 
 pub trait Provider {
     type Server: 'static + crypto::tls::Endpoint;
@@ -39,12 +40,28 @@ cfg_if! {
     }
 }
 
+pub struct Offload<E>(pub E);
+
+impl<E: Provider> Provider for Offload<E> {
+    type Server = OffloadEndpoint<<E as Provider>::Server>;
+    type Client = OffloadEndpoint<<E as Provider>::Client>;
+    type Error = E::Error;
+
+    fn start_server(self) -> Result<Self::Server, Self::Error> {
+        Ok(OffloadEndpoint::new(E::start_server(self.0)?))
+    }
+
+    fn start_client(self) -> Result<Self::Client, Self::Error> {
+        Ok(OffloadEndpoint::new(E::start_client(self.0)?))
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Default;
 
 impl Provider for Default {
-    type Server = default::Server;
-    type Client = default::Client;
+    type Server = OffloadEndpoint<default::Server>;
+    type Client = OffloadEndpoint<default::Client>;
     type Error = core::convert::Infallible;
 
     fn start_server(self) -> Result<Self::Server, Self::Error> {
@@ -66,7 +83,7 @@ impl Provider for (&std::path::Path, &std::path::Path) {
             .with_certificate(self.0, self.1)?
             .build()?;
 
-        Ok(server)
+        Ok(OffloadEndpoint::new(server))
     }
 
     fn start_client(self) -> Result<Self::Client, Self::Error> {
@@ -75,7 +92,7 @@ impl Provider for (&std::path::Path, &std::path::Path) {
             .with_certificate(self.0)?
             .build()?;
 
-        Ok(client)
+        Ok(OffloadEndpoint::new(client))
     }
 }
 
@@ -90,13 +107,13 @@ impl Provider for &std::path::Path {
             .with_certificate(empty_cert, self)?
             .build()?;
 
-        Ok(server)
+        Ok(OffloadEndpoint::new(server))
     }
 
     fn start_client(self) -> Result<Self::Client, Self::Error> {
         let client = default::Client::builder().with_certificate(self)?.build()?;
 
-        Ok(client)
+        Ok(OffloadEndpoint::new(client))
     }
 }
 
@@ -110,7 +127,7 @@ impl Provider for (&[u8], &[u8]) {
             .with_certificate(self.0, self.1)?
             .build()?;
 
-        Ok(server)
+        Ok(OffloadEndpoint::new(server))
     }
 
     fn start_client(self) -> Result<Self::Client, Self::Error> {
@@ -119,7 +136,7 @@ impl Provider for (&[u8], &[u8]) {
             .with_certificate(self.0)?
             .build()?;
 
-        Ok(client)
+        Ok(OffloadEndpoint::new(client))
     }
 }
 
@@ -134,13 +151,13 @@ impl Provider for &[u8] {
             .with_certificate(empty_cert, self)?
             .build()?;
 
-        Ok(server)
+        Ok(OffloadEndpoint::new(server))
     }
 
     fn start_client(self) -> Result<Self::Client, Self::Error> {
         let client = default::Client::builder().with_certificate(self)?.build()?;
 
-        Ok(client)
+        Ok(OffloadEndpoint::new(client))
     }
 }
 
@@ -154,7 +171,7 @@ impl Provider for (&str, &str) {
             .with_certificate(self.0, self.1)?
             .build()?;
 
-        Ok(server)
+        Ok(OffloadEndpoint::new(server))
     }
 
     fn start_client(self) -> Result<Self::Client, Self::Error> {
@@ -163,7 +180,7 @@ impl Provider for (&str, &str) {
             .with_certificate(self.0)?
             .build()?;
 
-        Ok(client)
+        Ok(OffloadEndpoint::new(client))
     }
 }
 
@@ -178,13 +195,13 @@ impl Provider for &str {
             .with_certificate(empty_cert, self)?
             .build()?;
 
-        Ok(server)
+        Ok(OffloadEndpoint::new(server))
     }
 
     fn start_client(self) -> Result<Self::Client, Self::Error> {
         let client = default::Client::builder().with_certificate(self)?.build()?;
 
-        Ok(client)
+        Ok(OffloadEndpoint::new(client))
     }
 }
 

@@ -17,6 +17,9 @@ pub mod testing;
 #[cfg(all(feature = "alloc", any(test, feature = "testing")))]
 pub mod null;
 
+#[cfg(feature = "alloc")]
+pub mod offload;
+
 /// Holds all application parameters which are exchanged within the TLS handshake.
 #[derive(Debug)]
 pub struct ApplicationParameters<'a> {
@@ -153,13 +156,13 @@ pub trait Context<Crypto: crate::crypto::CryptoSuite> {
     /// is willing to buffer.
     fn receive_application(&mut self, max_len: Option<usize>) -> Option<Bytes>;
 
-    fn can_send_initial(&self) -> bool;
+    fn can_send_initial(&mut self) -> bool;
     fn send_initial(&mut self, transmission: Bytes);
 
-    fn can_send_handshake(&self) -> bool;
+    fn can_send_handshake(&mut self) -> bool;
     fn send_handshake(&mut self, transmission: Bytes);
 
-    fn can_send_application(&self) -> bool;
+    fn can_send_application(&mut self) -> bool;
     fn send_application(&mut self, transmission: Bytes);
 
     fn waker(&self) -> &core::task::Waker;

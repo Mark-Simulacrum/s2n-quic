@@ -770,7 +770,7 @@ where
         self.application.rx(max_len)
     }
 
-    fn can_send_initial(&self) -> bool {
+    fn can_send_initial(&mut self) -> bool {
         true
     }
 
@@ -779,7 +779,7 @@ where
         self.initial.tx(transmission)
     }
 
-    fn can_send_handshake(&self) -> bool {
+    fn can_send_handshake(&mut self) -> bool {
         self.handshake.crypto.is_some()
     }
 
@@ -792,7 +792,7 @@ where
         self.handshake.tx(transmission)
     }
 
-    fn can_send_application(&self) -> bool {
+    fn can_send_application(&mut self) -> bool {
         self.application.crypto.is_some()
     }
 
