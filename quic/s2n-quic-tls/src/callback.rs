@@ -5,7 +5,10 @@ use bytes::{Bytes, BytesMut};
 use core::{ffi::c_void, marker::PhantomData};
 use s2n_quic_core::{
     application::ServerName,
-    crypto::{tls, tls::CipherSuite, CryptoSuite},
+    crypto::{
+        tls::{self, CipherSuite, OnClientParams},
+        CryptoSuite,
+    },
     endpoint, transport,
 };
 use s2n_quic_crypto::{
@@ -30,6 +33,7 @@ pub struct Callback<'a, T, C> {
     pub emitted_server_name: &'a mut bool,
     pub server_name: &'a Option<ServerName>,
     pub server_params: &'a mut Vec<u8>,
+    pub on_client_params: Option<&'a mut OnClientParams>,
 }
 
 impl<'a, T, C> Callback<'a, T, C>
@@ -230,10 +234,9 @@ where
 
                                 // Allow for additional server params to be appended that depend
                                 // on the given client params
-                                self.context.on_client_application_params(
-                                    client_params,
-                                    self.server_params,
-                                )?;
+                                if let Some(on_client_params) = self.on_client_params.as_mut() {
+                                    on_client_params(client_params, self.server_params)?;
+                                }
 
                                 // Now set the server transport parameters on the connection for
                                 // transmission to the client

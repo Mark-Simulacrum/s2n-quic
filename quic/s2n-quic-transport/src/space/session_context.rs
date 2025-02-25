@@ -19,7 +19,7 @@ use s2n_quic_core::{
     application::ServerName,
     connection::{InitialId, PeerId},
     crypto,
-    crypto::{tls, tls::ApplicationParameters, CryptoSuite, Key},
+    crypto::{tls, CryptoSuite, Key},
     ct::ConstantTimeEq,
     datagram::{ConnectionInfo, Endpoint},
     dc,
@@ -35,10 +35,9 @@ use s2n_quic_core::{
         self,
         parameters::{
             ActiveConnectionIdLimit, ClientTransportParameters, DatagramLimits,
-            DcSupportedVersions, InitialFlowControlLimits, InitialSourceConnectionId, MaxAckDelay,
-            ServerTransportParameters, TransportParameter as _,
+            InitialFlowControlLimits, InitialSourceConnectionId, MaxAckDelay,
+            ServerTransportParameters,
         },
-        Error,
     },
 };
 
@@ -666,35 +665,5 @@ impl<Config: endpoint::Config, Pub: event::ConnectionPublisher>
 
     fn waker(&self) -> &Waker {
         self.waker
-    }
-
-    fn on_client_application_params(
-        &mut self,
-        client_params: ApplicationParameters,
-        server_params: &mut Vec<u8>,
-    ) -> Result<(), Error> {
-        debug_assert!(Config::ENDPOINT_TYPE.is_server());
-
-        if Config::DcEndpoint::ENABLED {
-            let param_decoder = DecoderBuffer::new(client_params.transport_parameters);
-            let (client_params, remaining) = ClientTransportParameters::decode(param_decoder)
-                .map_err(|_| {
-                    //= https://www.rfc-editor.org/rfc/rfc9000#section-7.4
-                    //# An endpoint SHOULD treat receipt of
-                    //# duplicate transport parameters as a connection error of type
-                    //# TRANSPORT_PARAMETER_ERROR.
-                    transport::Error::TRANSPORT_PARAMETER_ERROR
-                        .with_reason("Invalid transport parameters")
-                })?;
-
-            debug_assert_eq!(remaining.len(), 0);
-
-            if let Some(selected_version) = dc::select_version(client_params.dc_supported_versions)
-            {
-                DcSupportedVersions::for_server(selected_version).append_to_buffer(server_params)
-            }
-        }
-
-        Ok(())
     }
 }

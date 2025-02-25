@@ -13,16 +13,26 @@ use crate::{
     space::PacketSpaceManager,
 };
 use core::convert::TryInto;
-use s2n_codec::DecoderBufferMut;
+use s2n_codec::{DecoderBuffer, DecoderBufferMut, DecoderValue};
 use s2n_quic_core::{
-    crypto::{tls, tls::Endpoint as TLSEndpoint, CryptoSuite, InitialKey},
+    crypto::{
+        tls::{self, Endpoint as TLSEndpoint},
+        CryptoSuite, InitialKey,
+    },
     datagram::{Endpoint, PreConnectionInfo},
+    dc::Endpoint as _,
     event::{self, supervisor, ConnectionPublisher, EndpointPublisher, IntoEvent, Subscriber as _},
     inet::{datagram, DatagramInfo},
     packet::initial::ProtectedInitial,
     path::Handle as _,
     stateless_reset::token::Generator as _,
-    transport::{self, parameters::ServerTransportParameters},
+    transport::{
+        self,
+        parameters::{
+            ClientTransportParameters, DcSupportedVersions, ServerTransportParameters,
+            TransportParameter,
+        },
+    },
 };
 
 impl<Config: endpoint::Config> endpoint::Endpoint<Config> {
@@ -226,9 +236,36 @@ impl<Config: endpoint::Config> endpoint::Endpoint<Config> {
             .try_into()
             .expect("Failed to convert max_datagram_frame_size");
 
-        let tls_session = endpoint_context
-            .tls
-            .new_server_session(&transport_parameters);
+        let tls_session = endpoint_context.tls.new_server_session(
+            &transport_parameters,
+            Box::new(|client_params, server_params| {
+                debug_assert!(Config::ENDPOINT_TYPE.is_server());
+
+                if Config::DcEndpoint::ENABLED {
+                    let param_decoder = DecoderBuffer::new(client_params.transport_parameters);
+                    let (client_params, remaining) =
+                        ClientTransportParameters::decode(param_decoder).map_err(|_| {
+                            //= https://www.rfc-editor.org/rfc/rfc9000#section-7.4
+                            //# An endpoint SHOULD treat receipt of
+                            //# duplicate transport parameters as a connection error of type
+                            //# TRANSPORT_PARAMETER_ERROR.
+                            transport::Error::TRANSPORT_PARAMETER_ERROR
+                                .with_reason("Invalid transport parameters")
+                        })?;
+
+                    debug_assert_eq!(remaining.len(), 0);
+
+                    if let Some(selected_version) =
+                        s2n_quic_core::dc::select_version(client_params.dc_supported_versions)
+                    {
+                        DcSupportedVersions::for_server(selected_version)
+                            .append_to_buffer(server_params)
+                    }
+                }
+
+                Ok(())
+            }),
+        );
 
         let quic_version = packet.version;
 

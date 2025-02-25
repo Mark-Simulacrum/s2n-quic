@@ -8,7 +8,7 @@ use crate::{
     crypto::{
         header_crypto::{LONG_HEADER_MASK, SHORT_HEADER_MASK},
         scatter, tls,
-        tls::{ApplicationParameters, CipherSuite, TlsExportError, TlsSession},
+        tls::{CipherSuite, TlsExportError, TlsSession},
         CryptoSuite, HeaderKey, Key,
     },
     endpoint, transport,
@@ -69,6 +69,7 @@ impl super::Endpoint for Endpoint {
     fn new_server_session<Params: EncoderValue>(
         &mut self,
         _transport_parameters: &Params,
+        _on_client_params: super::OnClientParams,
     ) -> Self::Session {
         Session
     }
@@ -185,7 +186,8 @@ impl<S: tls::Session, C: tls::Session> Pair<S, C> {
     {
         use crate::crypto::InitialKey;
 
-        let server = server_endpoint.new_server_session(&&server_params()[..]);
+        let server =
+            server_endpoint.new_server_session(&&server_params()[..], Box::new(|_, _| Ok(())));
         let mut server_context =
             Context::new(endpoint::Type::Server, ServerState::WaitingClientHello);
         server_context.initial.crypto = Some(S::InitialKey::new_server(server_name.as_bytes()));
@@ -660,15 +662,6 @@ impl<C: CryptoSuite, State: Debug, Params> tls::Context<C> for Context<C, State,
 where
     for<'a> Params: DecoderValue<'a>,
 {
-    fn on_client_application_params(
-        &mut self,
-        _client_params: ApplicationParameters,
-        _server_params: &mut Vec<u8>,
-    ) -> Result<(), transport::Error> {
-        self.log("client application params");
-        Ok(())
-    }
-
     fn on_handshake_keys(
         &mut self,
         key: C::HandshakeKey,

@@ -84,6 +84,7 @@ impl crypto::tls::Endpoint for Endpoint {
     fn new_server_session<Params: s2n_codec::EncoderValue>(
         &mut self,
         transport_parameters: &Params,
+        _on_client_params: super::OnClientParams,
     ) -> Self::Session {
         let params = transport_parameters.encode_to_vec().into();
         Session::Server(server::Session::Init {

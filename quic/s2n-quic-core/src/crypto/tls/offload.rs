@@ -138,18 +138,6 @@ where
         RetryKey = K9,
     >,
 {
-    fn on_client_application_params(
-        &mut self,
-        client_params: super::ApplicationParameters,
-        server_params: &mut alloc::vec::Vec<u8>,
-    ) -> Result<(), crate::transport::Error> {
-        let _ = self.tx.unbounded_send(Request::ClientAppParams(
-            client_params.transport_parameters.to_vec(),
-            server_params.clone(),
-        ));
-        Ok(())
-    }
-
     fn on_handshake_keys(
         &mut self,
         key: <C as CryptoSuite>::HandshakeKey,
@@ -366,9 +354,18 @@ impl<E: Endpoint> Endpoint for OffloadEndpoint<E> {
     fn new_server_session<Params: s2n_codec::EncoderValue>(
         &mut self,
         transport_parameters: &Params,
+        on_client_params: Box<
+            dyn FnMut(
+                    super::ApplicationParameters,
+                    &mut alloc::vec::Vec<u8>,
+                ) -> Result<(), crate::transport::Error>
+                + Send
+                + Sync,
+        >,
     ) -> Self::Session {
         OffloadSession::new(
-            self.inner.new_server_session(transport_parameters),
+            self.inner
+                .new_server_session(transport_parameters, on_client_params),
             &mut self.new_stream,
             self.remote_thread.clone(),
         )
@@ -421,7 +418,6 @@ enum Request<S: CryptoSuite> {
     SendApplication(bytes::Bytes),
     SendHandshake(bytes::Bytes),
     SendInitial(bytes::Bytes),
-    ClientAppParams(Vec<u8>, Vec<u8>),
 }
 
 #[derive(Debug)]
@@ -567,20 +563,6 @@ where
                     tracing::trace!("remote session sent SendInitial");
                     context.send_initial(bytes);
                 }
-                Request::ClientAppParams(client, server) => {
-                    let mut server_copy = server.clone();
-                    context
-                        .on_client_application_params(
-                            super::ApplicationParameters {
-                                transport_parameters: &client,
-                            },
-                            &mut server_copy,
-                        )
-                        .unwrap();
-                    if server_copy != server {
-                        unimplemented!("modifying parameters not supported (yet) with offload")
-                    }
-                }
             }
         }
     }
@@ -652,15 +634,6 @@ where
         RetryKey = K9,
     >,
 {
-    fn on_client_application_params(
-        &mut self,
-        client_params: super::ApplicationParameters,
-        server_params: &mut alloc::vec::Vec<u8>,
-    ) -> Result<(), crate::transport::Error> {
-        self.context
-            .on_client_application_params(client_params, server_params)
-    }
-
     fn on_handshake_keys(
         &mut self,
         key: <S1 as CryptoSuite>::HandshakeKey,

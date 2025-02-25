@@ -9,7 +9,11 @@ use crate::{
     ConfigLoader,
 };
 use s2n_codec::EncoderValue;
-use s2n_quic_core::{application::ServerName, crypto::tls, endpoint};
+use s2n_quic_core::{
+    application::ServerName,
+    crypto::tls::{self, OnClientParams},
+    endpoint,
+};
 #[cfg(any(test, feature = "unstable_client_hello"))]
 use s2n_tls::callbacks::ClientHelloCallback;
 #[cfg(any(test, feature = "unstable_private_key"))]
@@ -233,12 +237,23 @@ impl Builder {
 impl<L: ConfigLoader> tls::Endpoint for Server<L> {
     type Session = Session;
 
-    fn new_server_session<Params: EncoderValue>(&mut self, params: &Params) -> Self::Session {
+    fn new_server_session<Params: EncoderValue>(
+        &mut self,
+        params: &Params,
+        on_client_params: OnClientParams,
+    ) -> Self::Session {
         let config = self
             .loader
             .load(crate::ConnectionContext { server_name: None });
         self.params.with(params, |params| {
-            Session::new(endpoint::Type::Server, config, params, None).unwrap()
+            Session::new(
+                endpoint::Type::Server,
+                config,
+                params,
+                None,
+                Some(on_client_params),
+            )
+            .unwrap()
         })
     }
 

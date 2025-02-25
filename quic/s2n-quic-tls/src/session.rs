@@ -6,7 +6,10 @@ use bytes::BytesMut;
 use core::{marker::PhantomData, task::Poll};
 use s2n_quic_core::{
     application::ServerName,
-    crypto::{tls, tls::CipherSuite, CryptoSuite},
+    crypto::{
+        tls::{self, CipherSuite, OnClientParams},
+        CryptoSuite,
+    },
     endpoint, ensure, transport,
 };
 use s2n_quic_crypto::Suite;
@@ -17,7 +20,6 @@ use s2n_tls::{
     error::{Error, ErrorType},
 };
 
-#[derive(Debug)]
 pub struct Session {
     endpoint: endpoint::Type,
     pub(crate) connection: Connection,
@@ -29,6 +31,26 @@ pub struct Session {
     server_name: Option<ServerName>,
     received_ticket: bool,
     server_params: Vec<u8>,
+
+    on_client_params: Option<OnClientParams>,
+}
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("endpoint", &self.endpoint)
+            .field("connection", &self.connection)
+            .field("state", &self.state)
+            .field("handshake_complete", &self.handshake_complete)
+            .field("send_buffer", &self.send_buffer)
+            .field("emitted_server_name", &self.emitted_server_name)
+            .field("server_name", &self.server_name)
+            .field("received_ticket", &self.received_ticket)
+            .field("server_params", &self.server_params)
+            // Unfortunately Box<dyn FnMut(...)> isn't Debug :(
+            .field("on_client_params", &self.on_client_params.is_some())
+            .finish()
+    }
 }
 
 impl Session {
@@ -37,6 +59,7 @@ impl Session {
         config: Config,
         params: &[u8],
         server_name: Option<ServerName>,
+        on_client_params: Option<OnClientParams>,
     ) -> Result<Self, Error> {
         let mut connection = Connection::new(match endpoint {
             endpoint::Type::Server => Mode::Server,
@@ -76,6 +99,7 @@ impl Session {
             server_name,
             received_ticket: false,
             server_params,
+            on_client_params,
         })
     }
 }
@@ -134,6 +158,7 @@ impl tls::Session for Session {
             emitted_server_name: &mut self.emitted_server_name,
             server_name: &self.server_name,
             server_params: &mut self.server_params,
+            on_client_params: self.on_client_params.as_mut(),
         };
 
         unsafe {
@@ -181,6 +206,7 @@ impl tls::Session for Session {
             emitted_server_name: &mut self.emitted_server_name,
             server_name: &self.server_name,
             server_params: &mut self.server_params,
+            on_client_params: self.on_client_params.as_mut(),
         };
 
         unsafe {
