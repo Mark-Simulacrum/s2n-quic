@@ -6,7 +6,7 @@ use crate::{
     event::{self, EndpointPublisher as _},
     path::secret::map::store::Store,
 };
-use rand::Rng as _;
+use rand::{seq::SliceRandom, Rng as _};
 use s2n_quic_core::time;
 use std::{
     sync::{
@@ -70,6 +70,8 @@ impl Cleaner {
                 } else {
                     rand::rng().random_range(5..60)
                 };
+
+                let next_start = Instant::now() + Duration::from_secs(pause);
                 std::thread::park_timeout(Duration::from_secs(pause));
 
                 let Some(state) = state.upgrade() else {
@@ -79,8 +81,9 @@ impl Cleaner {
                     break;
                 }
                 state.cleaner().clean(&state, EVICTION_CYCLES);
+
                 // pause the rest of the time to run once a minute, not twice a minute
-                std::thread::park_timeout(Duration::from_secs(60 - pause));
+                std::thread::park_timeout(next_start.saturating_duration_since(Instant::now()));
             })
             .unwrap();
         *self.thread.lock().unwrap() = Some(handle);
@@ -93,7 +96,6 @@ impl Cleaner {
         S: event::Subscriber,
     {
         let current_epoch = self.epoch.fetch_add(1, Ordering::Relaxed);
-        let now = Instant::now();
 
         let utilization = |count: usize| (count as f32 / state.secrets_capacity() as f32) * 100.0;
 
@@ -103,7 +105,6 @@ impl Cleaner {
         let address_entries_initial = state.peers.len();
         let mut address_entries_retired = 0usize;
         let mut address_entries_active = 0usize;
-        let mut handshake_requests = 0usize;
 
         // We want to avoid taking long lived locks which affect gets on the maps (where we want
         // p100 latency to be in microseconds at most).
@@ -123,6 +124,9 @@ impl Cleaner {
         // This map is only accessed with queue lock held and in cleaner, so it is in practice
         // single threaded. No concurrent access is permitted.
         state.cleaner_peer_seen.clear();
+
+        let mut rehandshake_queue = state.cleaner_handshake_queue.lock().unwrap();
+        let refill_rehandshakes = rehandshake_queue.is_empty();
 
         // FIXME: add metrics for queue depth?
         // These are sort of equivalent to the ID map -- so maybe not worth it for now unless we
@@ -163,11 +167,10 @@ impl Cleaner {
                 return false;
             }
 
-            // Schedule re-handshaking
-            if entry.rehandshake_time() <= now {
-                handshake_requests += 1;
-                state.request_handshake(*entry.peer());
-                entry.rehandshake_time_reschedule(state.rehandshake_period());
+            if refill_rehandshakes {
+                // We'll dedup after we fill, we preallocate for the max capacity so this shouldn't
+                // allocate in practice.
+                rehandshake_queue.push(*entry.peer());
             }
 
             true
@@ -177,6 +180,68 @@ impl Cleaner {
         state.cleaner_peer_seen.clear();
 
         drop(queue);
+
+        if refill_rehandshakes {
+            rehandshake_queue.sort_unstable();
+            rehandshake_queue.dedup();
+
+            // Shuffling each time we pull a new queue means that we have p100 re-handshake time
+            // double the expected handshake period, because the entry handshaked at p0 on the
+            // first pass might end up at p100 on the second pass. We're OK with that tradeoff --
+            // the randomization avoids thundering herds against the same host, and while we could
+            // remember an order it's harder to get diffing that order with new entries right.
+            let mut rng = rand::rng();
+            rehandshake_queue.shuffle(&mut rng);
+        }
+
+        // Get the number of handshakes we should run during each minute.
+        let mut to_select = (60.0 * state.peers.len() as f64
+            / state.rehandshake_period().as_secs() as f64)
+            .trunc() as usize;
+        let mut handshake_at = state.cleaner_handshake_at.lock().unwrap();
+
+        // Roll a random number *once* to schedule the tail handshake. This avoids repeatedly
+        // rolling false if we rolled every minute with a small probability of success. This mostly
+        // matters in cases where to_select is otherwise zero (i.e., with small peer counts).
+        let max_delay = (60.0 * state.rehandshake_period().as_secs() as f64
+            / state.peers.len() as f64)
+            .ceil() as u64;
+        if handshake_at.is_none() && max_delay > 0 {
+            *handshake_at = Some(
+                std::time::Instant::now() + Duration::from_secs(rand::random_range(0..max_delay)),
+            );
+        }
+        // If the time when we should add the single handshake, then add it.
+        if handshake_at.is_some_and(|t| t <= Instant::now()) {
+            to_select += 1;
+            *handshake_at = None;
+        }
+
+        let mut handshake_requests = 0;
+        // request handshakes in smaller batches to avoid overloading the peer.
+        // this is expected to still run in way under a minute.
+        'outer: for chunk in rehandshake_queue.rchunks(25) {
+            for entry in chunk {
+                if let Some(n) = to_select.checked_sub(1) {
+                    to_select = n;
+                } else {
+                    break 'outer;
+                }
+
+                handshake_requests += 1;
+
+                state.request_handshake(*entry);
+            }
+            // Consider spreading more evenly across the full minute?
+            // Since we handshake in bursts of 25, this still allows 60*1000/50*25 = 30k
+            // handshakes/minute, which is orders of magnitude more than we should ever have. At
+            // 500k peers with a 24 hour handshake period means ~348 handshakes/minute.
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        let new_len = rehandshake_queue.len() - handshake_requests;
+        rehandshake_queue.truncate(new_len);
+        drop(rehandshake_queue);
 
         let id_entries = state.ids.len();
         let address_entries = state.peers.len();

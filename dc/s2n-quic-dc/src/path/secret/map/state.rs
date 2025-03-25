@@ -206,6 +206,16 @@ where
     // We use a PeerMap to save memory -- an Arc is 8 bytes, SocketAddr is 32 bytes.
     pub(super) cleaner_peer_seen: PeerMap,
 
+    // FIXME: This is larger than it needs to be because SocketAddr is 32 bytes. We should consider
+    // some other storage form, since IPv4 is 6 bytes and IPv6 is 28 bytes (18 bytes if we ignore
+    // scope ID), almost anything would be smaller than this. But this is cheaper to implement and
+    // we can revisit memory impact separately.
+    //
+    // Splitting IPv4 and IPv6 would help, but it would also mean that we scan one and then the
+    // other, which is probably bad idea long-term -- we want to visit peers randomly.
+    pub(super) cleaner_handshake_queue: Mutex<Vec<SocketAddr>>,
+    pub(super) cleaner_handshake_at: Mutex<Option<std::time::Instant>>,
+
     init_time: Timestamp,
 
     clock: C,
@@ -272,6 +282,8 @@ where
             ids: Default::default(),
             eviction_queue: Default::default(),
             cleaner_peer_seen: Default::default(),
+            cleaner_handshake_queue: Default::default(),
+            cleaner_handshake_at: Default::default(),
             cleaner: Cleaner::new(),
             signer,
             control_socket,
@@ -292,6 +304,11 @@ where
         state.peers.reserve(2 * state.max_capacity);
         state.ids.reserve(2 * state.max_capacity);
         state.cleaner_peer_seen.reserve(2 * state.max_capacity);
+        state
+            .cleaner_handshake_queue
+            .lock()
+            .unwrap()
+            .reserve(state.max_capacity);
 
         let state = Arc::new(state);
 
@@ -634,8 +651,6 @@ where
             assert_ne!(prev_id, id, "duplicate path secret id");
 
             prev.retire(self.cleaner.epoch());
-
-            entry.inherit_rehandshake(&prev);
 
             self.subscriber().on_path_secret_map_entry_replaced(
                 event::builder::PathSecretMapEntryReplaced {
