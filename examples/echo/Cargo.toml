@@ -5,8 +5,10 @@ authors = ["AWS s2n"]
 edition = "2021"
 
 [dependencies]
-s2n-quic = { version = "1", path = "../../quic/s2n-quic" }
+s2n-quic = { version = "1", path = "../../quic/s2n-quic", features = ["provider-event-tracing"] }
 tokio = { version = "1", features = ["full"] }
+tracing-subscriber = "0.3.19"
+tracing = "0.1"
 
 [workspace]
 members = ["."]

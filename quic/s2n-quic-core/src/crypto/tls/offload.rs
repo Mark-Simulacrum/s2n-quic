@@ -14,7 +14,7 @@ use crate::crypto::CryptoSuite;
 use super::{Context, Endpoint, Session};
 
 pub struct OffloadEndpoint<E: Endpoint> {
-    new_stream: UnboundedSender<(E::Session, UnboundedSender<Request<E::Session>>)>,
+    new_session: UnboundedSender<(E::Session, UnboundedSender<Request<E::Session>>)>,
     _thread: std::thread::JoinHandle<()>,
     inner: E,
     remote_thread: Waker,
@@ -35,12 +35,14 @@ impl<E: Endpoint> OffloadEndpoint<E> {
             let mut sessions = vec![];
             let waker = make_waker();
             loop {
-                // accept new sessions
                 let mut cx = std::task::Context::from_waker(&waker);
-                while let Poll::Ready(Some((new_stream, tx))) = Pin::new(&mut rx).poll_next(&mut cx)
+
+                // accept new sessions
+                while let Poll::Ready(Some((new_session, tx))) =
+                    Pin::new(&mut rx).poll_next(&mut cx)
                 {
                     sessions.push((
-                        new_stream,
+                        new_session,
                         RemoteContext {
                             tx,
                             waker: waker.clone(),
@@ -59,13 +61,13 @@ impl<E: Endpoint> OffloadEndpoint<E> {
                 tracing::trace!("polling {} sessions", sessions.len());
 
                 let mut next_sessions = vec![];
-                for (mut stream, mut ctx) in sessions {
-                    match stream.poll(&mut ctx) {
-                        core::task::Poll::Ready(res) => {
-                            ctx.tx.unbounded_send(Request::Done(stream, res)).unwrap();
+                for (mut session, mut ctx) in sessions {
+                    match session.poll(&mut ctx) {
+                        Poll::Ready(res) => {
+                            ctx.tx.unbounded_send(Request::Done(session, res)).unwrap();
                         }
-                        core::task::Poll::Pending => {
-                            next_sessions.push((stream, ctx));
+                        Poll::Pending => {
+                            next_sessions.push((session, ctx));
                         }
                     }
                 }
@@ -77,7 +79,7 @@ impl<E: Endpoint> OffloadEndpoint<E> {
         Self {
             remote_thread: core::task::Waker::from(Arc::new(ThreadWaker(handle.thread().clone()))),
             _thread: handle,
-            new_stream: tx,
+            new_session: tx,
             inner,
         }
     }
@@ -366,7 +368,7 @@ impl<E: Endpoint> Endpoint for OffloadEndpoint<E> {
         OffloadSession::new(
             self.inner
                 .new_server_session(transport_parameters, on_client_params),
-            &mut self.new_stream,
+            &mut self.new_session,
             self.remote_thread.clone(),
         )
     }
@@ -379,7 +381,7 @@ impl<E: Endpoint> Endpoint for OffloadEndpoint<E> {
         OffloadSession::new(
             self.inner
                 .new_client_session(transport_parameters, server_name),
-            &mut self.new_stream,
+            &mut self.new_session,
             self.remote_thread.clone(),
         )
     }
@@ -432,12 +434,12 @@ pub struct OffloadSession<S: CryptoSuite> {
 impl<S: CryptoSuite> OffloadSession<S> {
     fn new(
         inner: S,
-        new_stream: &mut UnboundedSender<(S, UnboundedSender<Request<S>>)>,
+        new_session: &mut UnboundedSender<(S, UnboundedSender<Request<S>>)>,
         remote_thread: Waker,
     ) -> Self {
         tracing::trace!("created new offload session");
         let (tx, rx) = futures_channel::mpsc::unbounded::<Request<S>>();
-        new_stream.unbounded_send((inner, tx)).unwrap();
+        new_session.unbounded_send((inner, tx)).unwrap();
         Self {
             inner: None,
             is_poll_done: None,
@@ -451,26 +453,30 @@ impl<S> Session for OffloadSession<S>
 where
     S: Session,
 {
+    // The interface here isn't actually arbitrary poll -- s2n-quic expects that
+    // sessions have consumed and posted back (to the Context) all work by the time poll() returns.
+    // effectively we are driving towards Ready (initial -> handshake -> application ...) each
+    // cycle.
     fn poll<C: Context<Self>>(
         &mut self,
         context: &mut C,
-    ) -> core::task::Poll<Result<(), crate::transport::Error>> {
+    ) -> Poll<Result<(), crate::transport::Error>> {
         if let Some(finished) = self.is_poll_done.clone() {
-            return core::task::Poll::Ready(finished);
+            return Poll::Ready(finished);
         }
 
-        loop {
-            self.remote_thread.wake_by_ref();
+        self.remote_thread.wake_by_ref();
 
+        loop {
             let mut cx = std::task::Context::from_waker(context.waker());
             tracing::trace!("polling remote session for pending requests");
             let req = match Pin::new(&mut self.pending_requests).poll_next(&mut cx) {
-                core::task::Poll::Ready(Some(message)) => message,
-                core::task::Poll::Ready(None) => {
+                Poll::Ready(Some(message)) => message,
+                Poll::Ready(None) => {
                     return Poll::Ready(Err(crate::transport::Error::INTERNAL_ERROR
                         .with_reason("offloaded crypto session finished without sending Done")))
                 }
-                core::task::Poll::Pending => return core::task::Poll::Pending,
+                Poll::Pending => break,
             };
 
             match req {
@@ -478,7 +484,7 @@ where
                     tracing::trace!("remote session sent Done");
                     self.inner = Some(session);
                     self.is_poll_done = Some(res.clone());
-                    return core::task::Poll::Ready(res);
+                    return Poll::Ready(res);
                 }
                 Request::HandshakeKeys(key, header_key) => {
                     tracing::trace!("remote session sent HandshakeKeys");
@@ -565,6 +571,8 @@ where
                 }
             }
         }
+
+        Poll::Pending
     }
 
     fn process_post_handshake_message<C: super::Context<Self>>(

@@ -12,9 +12,16 @@ pub static CERT_PEM: &str = include_str!(concat!(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //tracing_subscriber::fmt::fmt()
+    //    .with_max_level(tracing::Level::TRACE)
+    //    .with_writer(std::io::stdout)
+    //    .with_ansi(false)
+    //    .compact()
+    //    .init();
     let client = Client::builder()
         .with_tls(CERT_PEM)?
         .with_io("0.0.0.0:0")?
+        .with_event(s2n_quic::provider::event::tracing::Provider::default())?
         .start()?;
 
     let addr: SocketAddr = "127.0.0.1:4433".parse()?;

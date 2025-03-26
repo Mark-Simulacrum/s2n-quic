@@ -513,5 +513,5 @@ fn config_loader() {
     let mut server: Server<Box<dyn ConfigLoader>> = Server::from_loader(server);
 
     // make sure the server can actually create a session
-    let _ = server.new_server_session(&1);
+    let _ = server.new_server_session(&1, Box::new(|_, _| Ok(())));
 }

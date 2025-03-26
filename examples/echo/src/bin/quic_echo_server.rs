@@ -17,20 +17,27 @@ pub static KEY_PEM: &str = include_str!(concat!(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //tracing_subscriber::fmt::fmt()
+    //    .with_max_level(tracing::Level::TRACE)
+    //    .with_writer(std::io::stdout)
+    //    .with_ansi(false)
+    //    .compact()
+    //    .init();
     let mut server = Server::builder()
         .with_tls((CERT_PEM, KEY_PEM))?
         .with_io("127.0.0.1:4433")?
+        .with_event(s2n_quic::provider::event::tracing::Provider::default())?
         .start()?;
 
     while let Some(mut connection) = server.accept().await {
         // spawn a new task for the connection
         tokio::spawn(async move {
-            eprintln!("Connection accepted from {:?}", connection.remote_addr());
+            tracing::info!("Connection accepted from {:?}", connection.remote_addr());
 
             while let Ok(Some(mut stream)) = connection.accept_bidirectional_stream().await {
                 // spawn a new task for the stream
                 tokio::spawn(async move {
-                    eprintln!("Stream opened from {:?}", stream.connection().remote_addr());
+                    tracing::info!("Stream opened from {:?}", stream.connection().remote_addr());
 
                     // echo any data back to the stream
                     while let Ok(Some(data)) = stream.receive().await {

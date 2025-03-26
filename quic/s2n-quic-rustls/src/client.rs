@@ -5,6 +5,7 @@ use crate::{certificate, cipher_suite::default_crypto_provider, session::Session
 use core::convert::TryFrom;
 use rustls::{ClientConfig, ConfigBuilder, WantsVerifier};
 use s2n_codec::EncoderValue;
+use s2n_quic_core::crypto::tls::OnClientParams;
 use s2n_quic_core::{application::ServerName, crypto::tls};
 use std::sync::Arc;
 
@@ -71,6 +72,7 @@ impl tls::Endpoint for Client {
     fn new_server_session<Params: EncoderValue>(
         &mut self,
         _transport_parameters: &Params,
+        _on_client_params: OnClientParams,
     ) -> Self::Session {
         panic!("cannot create a server session from a client config");
     }

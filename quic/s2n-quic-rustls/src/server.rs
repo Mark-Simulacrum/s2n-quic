@@ -4,6 +4,7 @@
 use crate::{certificate, cipher_suite::default_crypto_provider, session::Session, Error};
 use rustls::{crypto::aws_lc_rs, ConfigBuilder, ServerConfig, WantsVerifier};
 use s2n_codec::EncoderValue;
+use s2n_quic_core::crypto::tls::OnClientParams;
 use s2n_quic_core::{application::ServerName, crypto::tls};
 use std::sync::Arc;
 
@@ -69,6 +70,8 @@ impl tls::Endpoint for Server {
     fn new_server_session<Params: EncoderValue>(
         &mut self,
         transport_parameters: &Params,
+        // not currently supported
+        _on_client_params: OnClientParams,
     ) -> Self::Session {
         //= https://www.rfc-editor.org/rfc/rfc9001#section-8.2
         //# Endpoints MUST send the quic_transport_parameters extension;
