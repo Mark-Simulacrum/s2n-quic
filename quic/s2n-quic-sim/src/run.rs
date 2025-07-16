@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::time::Duration;
+
 use crate::{stats, Result};
 use indicatif::{ParallelProgressIterator, ProgressBar};
 use rayon::prelude::*;
@@ -48,6 +50,8 @@ impl Run {
             test_seed(network.clone(), seed, |handle| {
                 let server_len = self.servers.gen();
                 let client_len = self.clients.gen();
+
+                tracing::info!("Running with {server_len} servers and {client_len} clients");
 
                 let events = self.gen_network(seed, server_len, client_len, &network);
 

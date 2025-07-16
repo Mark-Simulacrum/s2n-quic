@@ -189,6 +189,26 @@ impl event::Subscriber for Events {
     }
 
     #[inline]
+    fn on_dc_state_changed(
+        &mut self,
+        context: &mut Self::ConnectionContext,
+        meta: &event::events::ConnectionMeta,
+        event: &event::events::DcStateChanged,
+    ) {
+        match event.state {
+            event::events::DcState::Complete { .. } => {
+                context.dc_complete = Some(now().into());
+                tracing::info!(
+                    "{:?} dc_complete in {:?}",
+                    meta.endpoint_type,
+                    context.dc_complete()
+                );
+            }
+            _ => {}
+        }
+    }
+
+    #[inline]
     fn on_frame_sent(
         &mut self,
         context: &mut Self::ConnectionContext,

@@ -1,29 +1,52 @@
 [sim]
-max_inflight = "1..1000"
-connections = 100
-iterations = 1000
-stream_data = 100000
+# This is the default UDP socket queue and single-packet internal buffer in
+# s2n-quic.
+max_inflight = 22
+connections = 1
+clients = "2500..3500"
+max_udp_payload = 9000
 
-[report.duration]
-filters = ["conn.success"]
-x = "net.max_inflight"
-y = "conn.duration"
+# Zero network delay, we're relying on the delay introduced as part of packet
+# processing.
+delay = "0ms"
+network_jitter = "0ms"
+inflight_delay = "0ms"
+inflight_delay_threshold = 0
 
-[report.tx-packets]
-filters = ["conn.success"]
-x = "net.max_inflight"
-y = "conn.tx.packets"
+iterations = 3000
 
-[report.bytes-in-flight]
-filters = ["conn.success"]
-x = "net.max_inflight"
-y = "conn.max_bytes_in_flight"
-
-[report.cwin]
-filters = ["conn.success"]
-x = "net.max_inflight"
-y = "conn.max_cwin"
+# We just run handshakes, nothing else.
+stream_data = 0
+streams = 0
 
 [report.success]
-x = "net.max_inflight"
-y = "sim.success"
+x = "net.clients"
+y = "conn.pctsuccess"
+
+[report.success-per-conn]
+x = "net.clients"
+y = "conn.success"
+ 
+[report.client-success-dc-complete]
+filters = ["conn.success", "conn.client"]
+x = "net.clients"
+y = "conn.dc-complete.latency"
+
+[report.server-success-dc-complete]
+filters = ["conn.success", "conn.server"]
+x = "net.clients"
+y = "conn.dc-complete.latency"
+
+[report.success-dc-complete-tick]
+filters = ["conn.success", "net.clients<=5"]
+x = "net.clients"
+y = "conn.dc-complete.latency"
+
+[report.tx-packets]
+x = "net.clients"
+y = "conn.tx.packets"
+
+[report.tx-packets-success]
+filters = ["conn.success"]
+x = "net.clients"
+y = "conn.tx.packets"

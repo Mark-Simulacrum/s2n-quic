@@ -1,6 +1,9 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub use anyhow::Error;
 use structopt::StructOpt;
 
@@ -24,12 +27,13 @@ fn main() -> Result {
     let format = tracing_subscriber::fmt::format()
         .with_level(false) // don't include levels in formatted output
         .with_timer(Uptime)
-        .with_ansi(false)
-        .compact(); // Use a less verbose output format.
+        .compact()
+        .with_ansi(false); // Use a less verbose output format.
 
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .event_format(format)
+        .with_ansi(false)
         .init();
 
     match Args::from_args() {

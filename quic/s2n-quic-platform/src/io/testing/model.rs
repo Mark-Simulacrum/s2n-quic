@@ -297,12 +297,7 @@ impl Network for Model {
             }
 
             let model = self.clone();
-            let current_inflight = model.0.current_inflight.fetch_add(1, Ordering::SeqCst);
-
-            // scale the inflight delay by the number above the delay threshold
-            if let Some(mul) = current_inflight.checked_sub(inflight_delay_threshold) {
-                transmit_time += inflight_delay * mul as u32;
-            }
+            model.0.current_inflight.fetch_add(1, Ordering::SeqCst);
 
             // reverse the addresses so the dst/src are correct for the receiver
             packet.switch();
@@ -311,6 +306,17 @@ impl Network for Model {
 
             // spawn a task that will push the packet onto the receiver queue at the transit time
             super::spawn(async move {
+                let mut current_inflight = model.0.current_inflight.load(Ordering::Relaxed);
+                current_inflight += buffers
+                    .rx(*packet.path.local_address, |queue| queue.len() as u64)
+                    .unwrap_or_default();
+                // There must be at least one packet inflight (the one we're trying to send).
+                assert!(current_inflight > 0);
+                // scale the inflight delay by the number above the delay threshold
+                if let Some(mul) = current_inflight.checked_sub(inflight_delay_threshold) {
+                    transmit_time += dbg!(inflight_delay * mul as u32);
+                }
+
                 // if the packet isn't scheduled to transmit immediately, wait until the computed
                 // time
                 if now != transmit_time {
@@ -319,6 +325,8 @@ impl Network for Model {
 
                 buffers.rx(*packet.path.local_address, |queue| {
                     model.0.current_inflight.fetch_sub(1, Ordering::SeqCst);
+                    // FIXME: inflight shouldn't decrement until s2n-quic actually reads the
+                    // packet.
                     queue.enqueue(packet);
                 });
             });
@@ -346,6 +354,10 @@ impl Network for Model {
                 debug!("model::retransmit::rate count={count}");
                 transmission_count += transmit(Cow::Borrowed(&packet));
                 count += 1;
+            }
+
+            if transmission_count > 20 {
+                return Ok(());
             }
 
             transmission_count += transmit(Cow::Owned(packet));

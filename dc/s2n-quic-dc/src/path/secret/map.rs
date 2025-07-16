@@ -308,4 +308,9 @@ impl Map {
     ) {
         self.store.register_make_application_data(cb);
     }
+
+    #[doc(hidden)]
+    pub fn stop_cleaner_for_testing(&self) {
+        self.store.test_stop_cleaner();
+    }
 }

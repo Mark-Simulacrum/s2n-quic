@@ -9,6 +9,7 @@ use core::{
     time::Duration,
 };
 use s2n_quic_core::time::{clock, Timestamp};
+pub use time::timeout;
 
 pub fn now() -> Timestamp {
     unsafe { Timestamp::from_duration(time::Instant::now().elapsed_since_start()) }

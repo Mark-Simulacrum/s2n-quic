@@ -59,7 +59,6 @@ pub trait Store: 'static + Send + Sync {
     }
 
     /// Stops the cleaner thread
-    #[cfg(test)]
     fn test_stop_cleaner(&self);
 
     #[inline]

@@ -57,6 +57,7 @@ impl Pto {
     //# discarded (Section 4.9 of [QUIC-TLS]).
     #[inline]
     pub fn update(&mut self, base_timestamp: Timestamp, pto_period: Duration) {
+        //let pto_period = bach::rand::Any::any(&(pto_period..=pto_period * 2));
         self.timer.set(base_timestamp + pto_period);
     }
 

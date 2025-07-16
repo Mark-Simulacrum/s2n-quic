@@ -360,6 +360,10 @@ where
     fn on_read(&mut self, data: &mut [u8]) -> usize {
         let max_len = Some(data.len());
 
+        // reading from the network means we're going to process crypto frames, let's
+        // attribute some CPU to that processing.
+        s2n_quic_core::io::event_loop::attribute_cpu(core::time::Duration::from_micros(100));
+
         let chunk = match self.state.rx_phase {
             HandshakePhase::Initial => self.context.receive_initial(max_len),
             HandshakePhase::Handshake => self.context.receive_handshake(max_len),

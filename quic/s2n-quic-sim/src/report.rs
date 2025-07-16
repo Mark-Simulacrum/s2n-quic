@@ -8,7 +8,8 @@ use crate::{
 use serde_json::json;
 use std::{
     collections::{BTreeSet, HashMap},
-    fs, io,
+    fs,
+    io::{self, BufWriter, Write},
     path::PathBuf,
 };
 use structopt::StructOpt;
@@ -118,8 +119,22 @@ impl Report {
         let x_bin = x_bounds.bin(x_width as usize);
         let y_bin = y_bounds.bin(y_width as usize);
 
+        let mut binary_output = BufWriter::new(
+            std::fs::File::create(format!("{}.bin", self.title.clone().unwrap())).unwrap(),
+        );
+        for (_, _, x, y) in values.iter().copied() {
+            binary_output.write_all(&x.to_le_bytes()).unwrap();
+            binary_output.write_all(&y.to_le_bytes()).unwrap();
+        }
+        binary_output.flush().unwrap();
+
         let mut max_depth = 0;
         for (seed, _id, x, y) in values.iter().copied() {
+            // if y_bin.bin(y) > 98 {
+            //     assert_eq!(x, 1.0);
+            //     dbg!(seed, seed_ids.iter().find(|(_, v)| **v == seed), x, y);
+            // }
+
             let x = x_bin.bin(x);
             let y = y_bin.bin(y);
 
@@ -245,7 +260,7 @@ impl Report {
                 {
                     "name": "scale$axis_y",
                     "type": "linear",
-                    "domain": y_bounds.domain(self.y.ty),
+                    "domain": dbg!(y_bounds.domain(self.y.ty)),
                     "range": [0, size],
                     "reverse": true,
                     "nice": true,
@@ -614,6 +629,8 @@ impl Bounds {
     pub fn domain(&self, ty: stats::Type) -> [f64; 2] {
         if ty.is_duration() {
             [self.min * 1000.0, self.max * 1000.0]
+        } else if ty == stats::Type::Percent {
+            [0.0, 1.0]
         } else {
             [self.min, self.max]
         }

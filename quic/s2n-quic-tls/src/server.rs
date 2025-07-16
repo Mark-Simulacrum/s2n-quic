@@ -80,7 +80,8 @@ pub struct Builder {
 
 impl Default for Builder {
     fn default() -> Self {
-        let mut config = config::Builder::default();
+        let mut config = config::Builder::new();
+        config.with_system_certs(false).unwrap();
         config.enable_quic().unwrap();
         // https://github.com/aws/s2n-tls/blob/main/docs/USAGE-GUIDE.md#s2n_config_set_cipher_preferences
         config.set_security_policy(crate::DEFAULT_POLICY).unwrap();

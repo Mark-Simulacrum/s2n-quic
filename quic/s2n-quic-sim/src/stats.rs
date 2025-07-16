@@ -38,6 +38,7 @@ impl Stats {
             buffer.clear();
 
             buffer.push(tag);
+            assert!(tag < 3);
             let len = msg.encoded_len();
             let len: u16 = len.try_into().unwrap();
             buffer.extend_from_slice(&len.to_le_bytes());
@@ -84,9 +85,9 @@ impl<R: io::Read> Reader<R> {
                     let msg = Setup::decode(buffer)?;
                     Ok(msg.into())
                 }
-                _ => Err(io::Error::new(
+                other => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    "invalid stat tag",
+                    format!("invalid stat tag: {other}"),
                 )),
             }
         })
@@ -211,6 +212,8 @@ pub struct Connection {
     pub min_rtt: Option<Duration>,
     #[prost(message, tag = "20")]
     pub smoothed_rtt: Option<Duration>,
+    #[prost(message, tag = "21")]
+    pub dc_complete: Option<Duration>,
 }
 
 impl From<Connection> for Stats {
@@ -242,6 +245,13 @@ impl Connection {
 
     pub fn duration(&self) -> Option<core::time::Duration> {
         self.end_time
+            .unwrap_or_default()
+            .as_duration()
+            .checked_sub(self.start_time.unwrap_or_default().as_duration())
+    }
+
+    pub fn dc_complete(&self) -> Option<core::time::Duration> {
+        self.dc_complete
             .unwrap_or_default()
             .as_duration()
             .checked_sub(self.start_time.unwrap_or_default().as_duration())
@@ -372,7 +382,7 @@ impl Type {
         match self {
             Self::Integer => "~s",
             Self::Percent => "~%",
-            Self::Duration if max > 2000.0 => "%M:%S",
+            // Self::Duration if max > 2000.0 => "%M:%S",
             Self::Duration => "%Qms",
             Self::Throughput => "~s",
             Self::Bool => "c",
@@ -430,6 +440,10 @@ static QUERIES: &[(&str, Type, Q)] = &[
         let duration = conn.duration()?;
         Some(duration.as_secs_f64())
     }),
+    ("conn.dc-complete.latency", T, |_params, conn, _conns| {
+        let duration = conn.dc_complete()?;
+        Some(duration.as_secs_f64())
+    }),
     ("conn.handshake.confirmed", T, |_params, conn, _conns| {
         let duration = conn
             .handshake
@@ -461,6 +475,16 @@ static QUERIES: &[(&str, Type, Q)] = &[
     }),
     ("conn.success", B, |_params, conn, _conns| {
         Some(if conn.is_success() { 1.0 } else { 0.0 })
+    }),
+    ("conn.pctsuccess", P, |_params, _conn, conns| {
+        if conns.len() > 0 {
+            Some(
+                conns.iter().filter(|c| c.dc_complete().is_some()).count() as f64
+                    / conns.len() as f64,
+            )
+        } else {
+            None
+        }
     }),
     ("conn.error", B, |_params, conn, _conns| {
         Some(if conn.is_error() { 1.0 } else { 0.0 })

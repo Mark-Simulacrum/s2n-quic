@@ -142,15 +142,16 @@ impl Buffers {
         Ok(())
     }
 
-    pub fn rx<F: FnOnce(&mut Queue)>(&self, handle: SocketAddress, f: F) {
+    pub fn rx<T, F: FnOnce(&mut Queue) -> T>(&self, handle: SocketAddress, f: F) -> Option<T> {
         if let Ok(mut lock) = self.inner.lock() {
             let lock = &mut *lock;
             if let Some(host) = lock.addr_to_host.get(&handle) {
                 if let Some(queue) = lock.rx.get_mut(host) {
-                    f(queue)
+                    return Some(f(queue));
                 }
             }
         }
+        None
     }
 
     pub fn rx_host<F: FnOnce(&mut Queue)>(&self, host: HostId, f: F) -> io::Result<()> {
@@ -343,7 +344,7 @@ impl Queue {
     fn new(addr: SocketAddress, mtu: u16) -> Self {
         let local_address = addr.into();
         Self {
-            capacity: 1024,
+            capacity: 8192,
             mtu,
             packets: VecDeque::new(),
             local_address,

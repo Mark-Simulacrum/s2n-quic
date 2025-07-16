@@ -96,6 +96,26 @@ impl Plan {
 
         for (report_name, report) in self.report.iter() {
             let mut res = report.run(&out, command, &db, report_name)?;
+            let mut child = Command::new("uv")
+                .arg("run")
+                .arg("--python")
+                .arg("3.12")
+                .arg("--with")
+                .arg("numpy==2.2.0,matplotlib")
+                .arg("python3")
+                .arg("/local/home/thismark/hist-plot/density_plot.py")
+                .arg(format!("{}.bin", report_name))
+                .arg("--output")
+                .arg(out.join(format!("{report_name}.png")))
+                .arg("--x")
+                .arg(report.x.to_string())
+                .arg("--y")
+                .arg(report.y.to_string())
+                .arg("--title")
+                .arg(&report_name)
+                .spawn()
+                .unwrap();
+            child.wait().unwrap();
             res.0 = format!("{} - {}", name, res.0);
             reports.push(res);
         }

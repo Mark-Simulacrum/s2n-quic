@@ -9,7 +9,7 @@ use crate::{
     task::cooldown::Cooldown,
     time::clock::{ClockWithTimer, Timer},
 };
-use core::pin::Pin;
+use core::{cell::Cell, pin::Pin, time::Duration};
 
 pub mod select;
 use select::Select;
@@ -31,8 +31,8 @@ impl<E, C, R, T, S> EventLoop<E, C, R, T, S>
 where
     E: Endpoint,
     C: ClockWithTimer,
-    R: Rx<PathHandle = E::PathHandle>,
-    T: Tx<PathHandle = E::PathHandle>,
+    R: Rx<PathHandle = E::PathHandle> + Send,
+    T: Tx<PathHandle = E::PathHandle> + Send,
     S: Stats,
 {
     /// Starts running the endpoint event loop in an async task
@@ -142,6 +142,8 @@ where
                 }
             }
 
+            take_cpu().await;
+
             match tx_result {
                 Some(Ok(())) => {
                     // The TX queue was full and now has capacity. The endpoint can now continue to
@@ -165,6 +167,8 @@ where
                 endpoint.transmit(queue, &clock);
             });
 
+            take_cpu().await;
+
             // Get the next expiration from the endpoint and update the timer
             let timeout = endpoint.timeout();
             if let Some(timeout) = timeout {
@@ -186,4 +190,21 @@ where
             );
         }
     }
+}
+
+thread_local! {
+    static CPU_SPENT: Cell<Duration> = Cell::new(Duration::ZERO);
+}
+
+pub fn attribute_cpu(time: Duration) {
+    CPU_SPENT.with(|c| {
+        let old = c.get();
+        let new = old + time;
+        c.set(new);
+    });
+}
+
+pub fn take_cpu() -> bach::time::Sleep {
+    let taken = CPU_SPENT.with(|c| c.take());
+    bach::time::sleep(taken)
 }

@@ -6,9 +6,9 @@ use crate::{
     transport,
 };
 use alloc::{boxed::Box, vec::Vec};
-use core::{any::Any, task::Poll};
+use core::{any::Any, future::Future, pin::Pin, task::Poll, time::Duration};
 
-const DEFER_COUNT: u8 = 3;
+const DEFER_COUNT: u8 = 0;
 
 pub struct SlowEndpoint<E: tls::Endpoint> {
     endpoint: E,
@@ -30,7 +30,9 @@ impl<E: tls::Endpoint> tls::Endpoint for SlowEndpoint<E> {
         let inner_session = self.endpoint.new_server_session(transport_parameters);
         SlowSession {
             defer: DEFER_COUNT,
+            timer: None,
             inner_session,
+            is_done: false,
         }
     }
 
@@ -44,7 +46,9 @@ impl<E: tls::Endpoint> tls::Endpoint for SlowEndpoint<E> {
             .new_client_session(transport_parameters, server_name);
         SlowSession {
             defer: DEFER_COUNT,
+            timer: None,
             inner_session,
+            is_done: false,
         }
     }
 
@@ -60,6 +64,8 @@ impl<E: tls::Endpoint> tls::Endpoint for SlowEndpoint<E> {
 #[derive(Debug)]
 pub struct SlowSession<S: tls::Session> {
     defer: u8,
+    timer: Option<bach::time::scheduler::Timer>,
+    is_done: bool,
     inner_session: S,
 }
 
@@ -69,6 +75,21 @@ impl<S: tls::Session> tls::Session for SlowSession<S> {
     where
         W: tls::Context<Self>,
     {
+        if let Some(timer) = &mut self.timer {
+            core::task::ready!(
+                Pin::new(timer).poll(&mut core::task::Context::from_waker(context.waker()))
+            );
+            self.timer = None;
+        } else if !self.is_done {
+            // Assume each poll of the crypto provider will take a fixed time. This is somewhat
+            // random -- ideally we'd try to figure out what the work being done is (ECDH, key
+            // signing, etc.) and attribute fixed or randomized times to those. But this works out
+            // for now.
+            self.timer = Some(bach::time::sleep(Duration::from_micros(150)));
+            core::task::ready!(Pin::new(self.timer.as_mut().unwrap())
+                .poll(&mut core::task::Context::from_waker(context.waker())));
+        }
+
         // Self-wake and return Pending if defer is non-zero
         if let Some(d) = self.defer.checked_sub(1) {
             self.defer = d;
@@ -80,7 +101,11 @@ impl<S: tls::Session> tls::Session for SlowSession<S> {
         // in the TLS handshake and set up to defer again the next time
         // we're here.
         self.defer = DEFER_COUNT;
-        self.inner_session.poll(&mut SlowContext(context))
+        let res = self.inner_session.poll(&mut SlowContext(context));
+        if res.is_ready() {
+            self.is_done = true;
+        }
+        res
     }
 }
 
