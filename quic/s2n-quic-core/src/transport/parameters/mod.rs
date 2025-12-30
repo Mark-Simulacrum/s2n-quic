@@ -1226,11 +1226,11 @@ impl TransportParameter for MtuProbingCompleteSupport {
     const ID: TransportParameterId = TransportParameterId::from_u32(0xdc0001);
 
     fn from_codec_value(_value: ()) -> Self {
-        MtuProbingCompleteSupport::Disabled
+        MtuProbingCompleteSupport::Enabled
     }
 
     fn try_into_codec_value(&self) -> Option<&()> {
-        if let MtuProbingCompleteSupport::Disabled = self {
+        if let MtuProbingCompleteSupport::Enabled = self {
             Some(&())
         } else {
             None
